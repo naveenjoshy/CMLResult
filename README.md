@@ -27,7 +27,7 @@ Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and 
 
 - Password/PIN gate, with the password configured using `ADMIN_PASSWORD`. A successful login is remembered for the browser session.
 - **Results and scoring:** assign first, second, or third place and grades A, B, or C; points recalculate for candidates and their Mekhalas and Sakhas. Update event status between Upcoming, In Progress, and Completed.
-- **Event management:** add, edit, and delete events; configure eligible sections, gender, description, stage details, status, and placement/grade point values. Create separate events per selected section or combine sections into one event.
+- **Event management:** add, edit, and delete events; configure eligible sections, gender, description, stage details, status, and placement/grade point values. Choose combined male/female eligibility or create separate Male and Female events, with candidates shown only the matching event. Create separate events per selected section or combine sections into one event.
 - **Candidate management:** search, add, edit, and delete candidates. Admin registration bypasses the public registration deadline. Issue sequential `CML-101`-style chest numbers to candidates who do not have one, or edit a candidate's number directly.
 - **Mekhala and Sakha management:** add and delete Mekhalas and Sakhas, assign Sakhas to a parent Mekhala, and view candidate counts.
 - **Section and DOB rules:** add, edit, and delete sections; configure DOB ranges, descriptions, and display order; preview the section assigned to a test DOB.

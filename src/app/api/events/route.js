@@ -55,7 +55,10 @@ export async function POST(request) {
       eventCategories = ['General'];
     }
 
-    const eventGender = ['Male', 'Female'].includes(gender) ? gender : 'Both';
+    const separateGenderEvents = gender === 'Separate';
+    const eventGenders = separateGenderEvents
+      ? ['Male', 'Female']
+      : [['Male', 'Female'].includes(gender) ? gender : 'Both'];
     const eventDesc = (description || '').trim();
     const eventStageNumber = stageNumber !== undefined && stageNumber !== '' && stageNumber !== null ? Number(stageNumber) : null;
     const eventStageDesc = (stageDescription || '').trim();
@@ -63,30 +66,41 @@ export async function POST(request) {
 
     // When multiple categories are selected, create individual events for each category by default
     const shouldCreateSeparate = separateEvents !== false && eventCategories.length > 1;
+    const shouldCreateMultiple = shouldCreateSeparate || separateGenderEvents;
 
     const conn = await connectToDatabase();
 
-    if (shouldCreateSeparate) {
+    if (shouldCreateMultiple) {
       const createdList = [];
+      const categoryGroups = shouldCreateSeparate
+        ? eventCategories.map((section) => [section])
+        : [eventCategories];
+
       if (conn) {
-        for (const sec of eventCategories) {
-          const eventName = getSectionEventName(trimmedName, sec);
-          // Check if an event with this exact name already exists
-          let evDoc = await Event.findOne({ name: eventName });
-          if (!evDoc) {
-            evDoc = await Event.create({
-              name: eventName,
-              category: sec,
-              categories: [sec],
-              gender: eventGender,
-              description: eventDesc,
-              stageNumber: eventStageNumber,
-              stageDescription: eventStageDesc,
-              points: defaultPoints,
-              status: eventStatus,
-            });
+        for (const categoryGroup of categoryGroups) {
+          const baseEventName = shouldCreateSeparate
+            ? getSectionEventName(trimmedName, categoryGroup[0])
+            : trimmedName;
+          for (const eventGender of eventGenders) {
+            const eventName = separateGenderEvents
+              ? `${baseEventName} (${eventGender})`
+              : baseEventName;
+            let evDoc = await Event.findOne({ name: eventName });
+            if (!evDoc) {
+              evDoc = await Event.create({
+                name: eventName,
+                category: categoryGroup.join(', '),
+                categories: categoryGroup,
+                gender: eventGender,
+                description: eventDesc,
+                stageNumber: eventStageNumber,
+                stageDescription: eventStageDesc,
+                points: defaultPoints,
+                status: eventStatus,
+              });
+            }
+            createdList.push(evDoc);
           }
-          createdList.push(evDoc);
         }
         return NextResponse.json({ 
           success: true, 
@@ -97,26 +111,33 @@ export async function POST(request) {
       }
 
       const store = getMemoryStore();
-      for (const sec of eventCategories) {
-        const eventName = getSectionEventName(trimmedName, sec);
-        let evDoc = store.events.find(e => e.name === eventName);
-        if (!evDoc) {
-          evDoc = {
-            _id: 'e_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-            name: eventName,
-            category: sec,
-            categories: [sec],
-            gender: eventGender,
-            description: eventDesc,
-            stageNumber: eventStageNumber,
-            stageDescription: eventStageDesc,
-            points: defaultPoints,
-            status: eventStatus,
-            createdAt: new Date(),
-          };
-          store.events.unshift(evDoc);
+      for (const categoryGroup of categoryGroups) {
+        const baseEventName = shouldCreateSeparate
+          ? getSectionEventName(trimmedName, categoryGroup[0])
+          : trimmedName;
+        for (const eventGender of eventGenders) {
+          const eventName = separateGenderEvents
+            ? `${baseEventName} (${eventGender})`
+            : baseEventName;
+          let evDoc = store.events.find(e => e.name === eventName);
+          if (!evDoc) {
+            evDoc = {
+              _id: 'e_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: eventName,
+              category: categoryGroup.join(', '),
+              categories: categoryGroup,
+              gender: eventGender,
+              description: eventDesc,
+              stageNumber: eventStageNumber,
+              stageDescription: eventStageDesc,
+              points: defaultPoints,
+              status: eventStatus,
+              createdAt: new Date(),
+            };
+            store.events.unshift(evDoc);
+          }
+          createdList.push(evDoc);
         }
-        createdList.push(evDoc);
       }
       return NextResponse.json({ 
         success: true, 
@@ -133,7 +154,7 @@ export async function POST(request) {
         name: trimmedName,
         category: eventCategory,
         categories: eventCategories,
-        gender: eventGender,
+        gender: eventGenders[0],
         description: eventDesc,
         stageNumber: eventStageNumber,
         stageDescription: eventStageDesc,
@@ -149,7 +170,7 @@ export async function POST(request) {
       name: trimmedName,
       category: eventCategory,
       categories: eventCategories,
-      gender: eventGender,
+      gender: eventGenders[0],
       description: eventDesc,
       stageNumber: eventStageNumber,
       stageDescription: eventStageDesc,
@@ -187,7 +208,7 @@ export async function PUT(request) {
       updateData.category = category.trim();
     }
 
-    if (gender !== undefined) {
+    if (gender !== undefined && gender !== 'Separate') {
       updateData.gender = ['Male', 'Female'].includes(gender) ? gender : 'Both';
     }
 

@@ -58,8 +58,7 @@ export function isEventAvailableForSection(event, section) {
 
 export const GENDER_OPTIONS = [
   { value: 'Both', label: 'Combined (Male & Female)' },
-  { value: 'Male', label: 'Male Only' },
-  { value: 'Female', label: 'Female Only' },
+  { value: 'Separate', label: 'Separate Male & Female Events' },
 ];
 
 /**
@@ -88,8 +87,8 @@ export function isEventAvailableForCandidate(event, section, sex) {
  */
 export function formatEventGender(event) {
   const g = (event?.gender || 'Both').trim();
-  if (g.toLowerCase() === 'male') return 'Male Only';
-  if (g.toLowerCase() === 'female') return 'Female Only';
+  if (g.toLowerCase() === 'male') return 'Male Event';
+  if (g.toLowerCase() === 'female') return 'Female Event';
   return 'Combined';
 }
 

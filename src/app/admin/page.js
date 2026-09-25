@@ -322,7 +322,9 @@ export default function AdminPage() {
           name: editingEvent.name,
           categories: cats,
           category: cats.join(', '),
-          gender: editingEvent.gender || 'Both',
+          gender: editingEvent.gender === 'Separate'
+            ? (events.find(ev => ev._id === editingEvent._id)?.gender || 'Both')
+            : editingEvent.gender || 'Both',
           description: editingEvent.description,
           stageNumber: editingEvent.stageNumber !== '' && editingEvent.stageNumber !== undefined ? Number(editingEvent.stageNumber) : null,
           stageDescription: editingEvent.stageDescription || '',
@@ -1259,6 +1261,11 @@ export default function AdminPage() {
                     );
                   })}
                 </div>
+                {newEvent.gender === 'Separate' && (
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0.6rem 0 0' }}>
+                    Creates separate Male and Female events. Candidates will only see the event matching their sex.
+                  </p>
+                )}
               </div>
 
               <div className="form-group" style={{ marginBottom: '1rem' }}>
@@ -1393,7 +1400,9 @@ export default function AdminPage() {
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                {newEvent.categories?.length > 1 && newEvent.separateEvents !== false
+                {newEvent.gender === 'Separate'
+                  ? '➕ Create Separate Male & Female Events'
+                  : newEvent.categories?.length > 1 && newEvent.separateEvents !== false
                   ? `➕ Create ${newEvent.categories.length} Events (One per Section)`
                   : '➕ Create Event'}
               </button>
@@ -2340,12 +2349,19 @@ export default function AdminPage() {
                 </label>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {GENDER_OPTIONS.map((opt) => {
-                    const isSelected = (editingEvent.gender || 'Both') === opt.value;
+                    const eventHasSeparateGender = ['Male', 'Female'].includes(editingEvent.gender);
+                    const isSelected = opt.value === 'Separate'
+                      ? eventHasSeparateGender
+                      : (editingEvent.gender || 'Both') === opt.value;
+                    const isDisabled = opt.value === 'Separate' && !eventHasSeparateGender;
                     return (
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => setEditingEvent({ ...editingEvent, gender: opt.value })}
+                        onClick={() => {
+                          if (!isDisabled) setEditingEvent({ ...editingEvent, gender: opt.value });
+                        }}
+                        disabled={isDisabled}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
