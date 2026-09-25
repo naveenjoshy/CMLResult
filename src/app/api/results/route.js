@@ -4,7 +4,6 @@ import Event from '@/models/Event';
 import Candidate from '@/models/Candidate';
 import Mekhala from '@/models/Mekhala';
 import Parish from '@/models/Parish';
-import { getMemoryStore } from '@/lib/memoryStore';
 
 function aggregateResults(events, candidates, mekhalas, parishes) {
   // Mekhala points map
@@ -157,23 +156,31 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
 
 export async function GET() {
   try {
-    const conn = await connectToDatabase();
-    if (conn) {
-      const [events, candidates, mekhalas, parishes] = await Promise.all([
-        Event.find({}).lean(),
-        Candidate.find({}).lean(),
-        Mekhala.find({}).lean(),
-        Parish.find({}).lean(),
-      ]);
+    await connectToDatabase();
+    const [events, candidates, mekhalas, parishes] = await Promise.all([
+      Event.find({}).lean(),
+      Candidate.find({}).lean(),
+      Mekhala.find({}).lean(),
+      Parish.find({}).lean(),
+    ]);
 
-      const result = aggregateResults(events, candidates, mekhalas, parishes);
-      return NextResponse.json({ success: true, data: result, source: 'mongodb' });
-    }
+    const publicCandidates = candidates.map(candidate => ({
+      _id: candidate._id,
+      chestNo: candidate.chestNo,
+      name: candidate.name,
+      houseName: candidate.houseName,
+      parish: candidate.parish,
+      mekhala: candidate.mekhala,
+      section: candidate.section,
+      sex: candidate.sex,
+      event: candidate.event,
+      position: candidate.position,
+      grade: candidate.grade,
+      totalPoints: candidate.totalPoints,
+    }));
+    const result = aggregateResults(events, publicCandidates, mekhalas, parishes);
+    return NextResponse.json({ success: true, data: result, source: 'mongodb' });
   } catch (err) {
-    console.warn('[Results GET] MongoDB error, falling back to memory store:', err.message);
+    return NextResponse.json({ success: false, message: 'MongoDB is required to load results.' }, { status: 503 });
   }
-
-  const store = getMemoryStore();
-  const result = aggregateResults(store.events, store.candidates, store.mekhalas, store.parishes);
-  return NextResponse.json({ success: true, data: result, source: 'memory' });
 }

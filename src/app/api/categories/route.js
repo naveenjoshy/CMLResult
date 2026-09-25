@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Category from '@/models/Category';
-import { getMemoryStore } from '@/lib/memoryStore';
+import { requireAdmin } from '@/lib/adminAuth';
 
 const DEFAULT_CATEGORIES = [
   {
@@ -43,25 +43,22 @@ const DEFAULT_CATEGORIES = [
 
 export async function GET() {
   try {
-    const conn = await connectToDatabase();
-    if (conn) {
-      let categories = await Category.find({}).sort({ order: 1, name: 1 });
-      if (!categories || categories.length === 0) {
-        await Category.insertMany(DEFAULT_CATEGORIES);
-        categories = await Category.find({}).sort({ order: 1, name: 1 });
-      }
-      return NextResponse.json({ success: true, data: categories, source: 'mongodb' });
+    await connectToDatabase();
+    let categories = await Category.find({}).sort({ order: 1, name: 1 });
+    if (!categories || categories.length === 0) {
+      await Category.insertMany(DEFAULT_CATEGORIES);
+      categories = await Category.find({}).sort({ order: 1, name: 1 });
     }
+    return NextResponse.json({ success: true, data: categories, source: 'mongodb' });
   } catch (err) {
-    console.warn('[Categories GET] MongoDB error, falling back to memory store:', err.message);
+    return NextResponse.json({ success: false, message: 'MongoDB is required to load categories.', error: err.message }, { status: 503 });
   }
-
-  const store = getMemoryStore();
-  return NextResponse.json({ success: true, data: store.categories || DEFAULT_CATEGORIES, source: 'memory' });
 }
 
 export async function POST(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     const { name, minDob, maxDob, description, order } = body;
 
@@ -70,44 +67,20 @@ export async function POST(request) {
     }
 
     const trimmedName = name.trim();
-    const conn = await connectToDatabase();
-
-    if (conn) {
-      const existing = await Category.findOne({ name: { $regex: new RegExp(`^${trimmedName}$`, 'i') } });
-      if (existing) {
-        return NextResponse.json({ success: false, message: `Category "${trimmedName}" already exists` }, { status: 409 });
-      }
-
-      const created = await Category.create({
-        name: trimmedName,
-        minDob: (minDob || '').trim(),
-        maxDob: (maxDob || '').trim(),
-        description: (description || '').trim(),
-        order: Number(order) || 10,
-      });
-
-      return NextResponse.json({ success: true, data: created, source: 'mongodb' }, { status: 201 });
-    }
-
-    const store = getMemoryStore();
-    if (!store.categories) store.categories = [...DEFAULT_CATEGORIES];
-    const exists = store.categories.some(c => c.name.toLowerCase() === trimmedName.toLowerCase());
-    if (exists) {
+    await connectToDatabase();
+    const existing = await Category.findOne({ name: { $regex: new RegExp(`^${trimmedName}$`, 'i') } });
+    if (existing) {
       return NextResponse.json({ success: false, message: `Category "${trimmedName}" already exists` }, { status: 409 });
     }
 
-    const newCat = {
-      _id: 'cat_' + Date.now(),
+    const created = await Category.create({
       name: trimmedName,
       minDob: (minDob || '').trim(),
       maxDob: (maxDob || '').trim(),
       description: (description || '').trim(),
       order: Number(order) || 10,
-      createdAt: new Date(),
-    };
-    store.categories.push(newCat);
-
-    return NextResponse.json({ success: true, data: newCat, source: 'memory' }, { status: 201 });
+    });
+    return NextResponse.json({ success: true, data: created, source: 'mongodb' }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
@@ -115,6 +88,8 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     const { id, name, minDob, maxDob, description, order } = body;
 
@@ -122,7 +97,7 @@ export async function PUT(request) {
       return NextResponse.json({ success: false, message: 'Category ID is required' }, { status: 400 });
     }
 
-    const conn = await connectToDatabase();
+    await connectToDatabase();
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
     if (minDob !== undefined) updateData.minDob = minDob.trim();
@@ -130,22 +105,11 @@ export async function PUT(request) {
     if (description !== undefined) updateData.description = description.trim();
     if (order !== undefined) updateData.order = Number(order);
 
-    if (conn) {
-      const updated = await Category.findByIdAndUpdate(id, updateData, { new: true });
-      if (!updated) {
-        return NextResponse.json({ success: false, message: 'Category not found' }, { status: 404 });
-      }
-      return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
-    }
-
-    const store = getMemoryStore();
-    const idx = (store.categories || []).findIndex(c => String(c._id) === String(id));
-    if (idx === -1) {
+    const updated = await Category.findByIdAndUpdate(id, updateData, { new: true });
+    if (!updated) {
       return NextResponse.json({ success: false, message: 'Category not found' }, { status: 404 });
     }
-
-    store.categories[idx] = { ...store.categories[idx], ...updateData };
-    return NextResponse.json({ success: true, data: store.categories[idx], source: 'memory' });
+    return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
   } catch (err) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
@@ -153,6 +117,8 @@ export async function PUT(request) {
 
 export async function DELETE(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -160,14 +126,8 @@ export async function DELETE(request) {
       return NextResponse.json({ success: false, message: 'Category ID is required' }, { status: 400 });
     }
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      await Category.findByIdAndDelete(id);
-      return NextResponse.json({ success: true, message: 'Category deleted' });
-    }
-
-    const store = getMemoryStore();
-    store.categories = (store.categories || []).filter(c => String(c._id) !== String(id));
+    await connectToDatabase();
+    await Category.findByIdAndDelete(id);
     return NextResponse.json({ success: true, message: 'Category deleted' });
   } catch (err) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });

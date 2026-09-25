@@ -120,12 +120,17 @@ export default function AdminPage() {
   const [parishSearch, setParishSearch] = useState('');
   const [parishMekhalaFilter, setParishMekhalaFilter] = useState('ALL');
 
-  // Check login from sessionStorage on mount
+  // Verify the server-side admin session on mount.
   useEffect(() => {
-    const savedAuth = sessionStorage.getItem('cml_admin_auth');
-    if (savedAuth === 'true') {
-      setIsAuthenticated(true);
-    }
+    let active = true;
+    fetch('/api/admin/session', { cache: 'no-store' })
+      .then(response => {
+        if (active) setIsAuthenticated(response.ok);
+      })
+      .catch(() => {
+        if (active) setIsAuthenticated(false);
+      });
+    return () => { active = false; };
   }, []);
 
   // Fetch all admin data
@@ -205,7 +210,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setIsAuthenticated(true);
-        sessionStorage.setItem('cml_admin_auth', 'true');
+        window.dispatchEvent(new Event('cml-admin-session-changed'));
       } else {
         setPinError(data.message || 'Invalid Password');
       }
@@ -214,9 +219,14 @@ export default function AdminPage() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to clear admin session:', err);
+    }
     setIsAuthenticated(false);
-    sessionStorage.removeItem('cml_admin_auth');
+    window.dispatchEvent(new Event('cml-admin-session-changed'));
   };
 
   // Notification helper
@@ -764,9 +774,11 @@ export default function AdminPage() {
                 id="admin-pin"
                 type="password"
                 className="form-input"
-                placeholder="Default: admin123"
+                placeholder="Enter admin password"
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
+                minLength={16}
+                autoComplete="current-password"
                 autoFocus
                 required
               />

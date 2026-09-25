@@ -1,31 +1,23 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Event from '@/models/Event';
-import { getMemoryStore } from '@/lib/memoryStore';
 import { getSectionEventName } from '@/lib/eventUtils';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export async function GET() {
   try {
-    try {
-      const conn = await connectToDatabase();
-      if (conn) {
-        const events = await Event.find({}).sort({ createdAt: -1 });
-        return NextResponse.json({ success: true, data: events, source: 'mongodb' });
-      }
-    } catch (dbErr) {
-      console.warn('[Events GET] MongoDB error, falling back to memory store:', dbErr.message);
-    }
-
-    const store = getMemoryStore();
-    return NextResponse.json({ success: true, data: store.events, source: 'memory' });
+    await connectToDatabase();
+    const events = await Event.find({}).sort({ createdAt: -1 });
+    return NextResponse.json({ success: true, data: events, source: 'mongodb' });
   } catch (err) {
-    console.error('[Events GET] Fatal error:', err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'MongoDB is required to load events.', error: err.message }, { status: 503 });
   }
 }
 
 export async function POST(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     const { name, category, categories, gender, description, stageNumber, stageDescription, points, status, separateEvents } = body;
 
@@ -68,7 +60,7 @@ export async function POST(request) {
     const shouldCreateSeparate = separateEvents !== false && eventCategories.length > 1;
     const shouldCreateMultiple = shouldCreateSeparate || separateGenderEvents;
 
-    const conn = await connectToDatabase();
+    await connectToDatabase();
 
     if (shouldCreateMultiple) {
       const createdList = [];
@@ -76,41 +68,6 @@ export async function POST(request) {
         ? eventCategories.map((section) => [section])
         : [eventCategories];
 
-      if (conn) {
-        for (const categoryGroup of categoryGroups) {
-          const baseEventName = shouldCreateSeparate
-            ? getSectionEventName(trimmedName, categoryGroup[0])
-            : trimmedName;
-          for (const eventGender of eventGenders) {
-            const eventName = separateGenderEvents
-              ? `${baseEventName} (${eventGender})`
-              : baseEventName;
-            let evDoc = await Event.findOne({ name: eventName });
-            if (!evDoc) {
-              evDoc = await Event.create({
-                name: eventName,
-                category: categoryGroup.join(', '),
-                categories: categoryGroup,
-                gender: eventGender,
-                description: eventDesc,
-                stageNumber: eventStageNumber,
-                stageDescription: eventStageDesc,
-                points: defaultPoints,
-                status: eventStatus,
-              });
-            }
-            createdList.push(evDoc);
-          }
-        }
-        return NextResponse.json({ 
-          success: true, 
-          data: createdList, 
-          count: createdList.length, 
-          source: 'mongodb' 
-        }, { status: 201 });
-      }
-
-      const store = getMemoryStore();
       for (const categoryGroup of categoryGroups) {
         const baseEventName = shouldCreateSeparate
           ? getSectionEventName(trimmedName, categoryGroup[0])
@@ -119,10 +76,9 @@ export async function POST(request) {
           const eventName = separateGenderEvents
             ? `${baseEventName} (${eventGender})`
             : baseEventName;
-          let evDoc = store.events.find(e => e.name === eventName);
+          let evDoc = await Event.findOne({ name: eventName });
           if (!evDoc) {
-            evDoc = {
-              _id: 'e_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            evDoc = await Event.create({
               name: eventName,
               category: categoryGroup.join(', '),
               categories: categoryGroup,
@@ -132,9 +88,7 @@ export async function POST(request) {
               stageDescription: eventStageDesc,
               points: defaultPoints,
               status: eventStatus,
-              createdAt: new Date(),
-            };
-            store.events.unshift(evDoc);
+            });
           }
           createdList.push(evDoc);
         }
@@ -143,30 +97,13 @@ export async function POST(request) {
         success: true, 
         data: createdList, 
         count: createdList.length, 
-        source: 'memory' 
+        source: 'mongodb'
       }, { status: 201 });
     }
 
     // Single event creation
     const eventCategory = eventCategories.join(', ');
-    if (conn) {
-      const created = await Event.create({
-        name: trimmedName,
-        category: eventCategory,
-        categories: eventCategories,
-        gender: eventGenders[0],
-        description: eventDesc,
-        stageNumber: eventStageNumber,
-        stageDescription: eventStageDesc,
-        points: defaultPoints,
-        status: eventStatus,
-      });
-      return NextResponse.json({ success: true, data: created, source: 'mongodb' }, { status: 201 });
-    }
-
-    const store = getMemoryStore();
-    const newEvent = {
-      _id: 'e_' + Date.now(),
+    const created = await Event.create({
       name: trimmedName,
       category: eventCategory,
       categories: eventCategories,
@@ -176,11 +113,8 @@ export async function POST(request) {
       stageDescription: eventStageDesc,
       points: defaultPoints,
       status: eventStatus,
-      createdAt: new Date(),
-    };
-    store.events.unshift(newEvent);
-
-    return NextResponse.json({ success: true, data: newEvent, source: 'memory' }, { status: 201 });
+    });
+    return NextResponse.json({ success: true, data: created, source: 'mongodb' }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
@@ -188,6 +122,8 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     const { id, name, category, categories, gender, description, stageNumber, stageDescription, points, status } = body;
 
@@ -227,20 +163,12 @@ export async function PUT(request) {
       };
     }
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      const updated = await Event.findByIdAndUpdate(id, updateData, { new: true });
-      return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
+    await connectToDatabase();
+    const updated = await Event.findByIdAndUpdate(id, updateData, { new: true });
+    if (!updated) {
+      return NextResponse.json({ success: false, message: 'Event not found' }, { status: 404 });
     }
-
-    const store = getMemoryStore();
-    const idx = store.events.findIndex(e => e._id === id);
-    if (idx !== -1) {
-      store.events[idx] = { ...store.events[idx], ...updateData };
-      return NextResponse.json({ success: true, data: store.events[idx], source: 'memory' });
-    }
-
-    return NextResponse.json({ success: false, message: 'Event not found' }, { status: 404 });
+    return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
@@ -248,6 +176,8 @@ export async function PUT(request) {
 
 export async function DELETE(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -255,15 +185,9 @@ export async function DELETE(request) {
       return NextResponse.json({ success: false, message: 'Event ID is required' }, { status: 400 });
     }
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      await Event.findByIdAndDelete(id);
-      return NextResponse.json({ success: true, message: 'Event deleted' });
-    }
-
-    const store = getMemoryStore();
-    store.events = store.events.filter(e => e._id !== id);
-    return NextResponse.json({ success: true, message: 'Event deleted from memory' });
+    await connectToDatabase();
+    await Event.findByIdAndDelete(id);
+    return NextResponse.json({ success: true, message: 'Event deleted' });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

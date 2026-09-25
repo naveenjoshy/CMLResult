@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { connectToDatabase } from '@/lib/db';
 import CertificateDesign from '@/models/CertificateDesign';
-import { getMemoryStore } from '@/lib/memoryStore';
+import { requireAdmin } from '@/lib/adminAuth';
 
 const ALLOWED_FIELDS = new Set(['name', 'houseName', 'mekhala', 'parish', 'event', 'position', 'grade']);
 
@@ -51,41 +51,31 @@ function normalizeDesign(body, key) {
   };
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const conn = await connectToDatabase();
-    if (conn) {
-      const designs = await CertificateDesign.find({}).sort({ updatedAt: -1, name: 1 }).lean();
-      return NextResponse.json({
-        success: true,
-        data: designs.map(design => ({ ...design, name: design.name || 'Default Certificate Design' })),
-        source: 'mongodb',
-      });
-    }
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
+    await connectToDatabase();
+    const designs = await CertificateDesign.find({}).sort({ updatedAt: -1, name: 1 }).lean();
+    return NextResponse.json({
+      success: true,
+      data: designs.map(design => ({ ...design, name: design.name || 'Default Certificate Design' })),
+      source: 'mongodb',
+    });
   } catch (err) {
-    console.warn('[Certificate Designs GET] MongoDB error, falling back to memory store:', err.message);
+    return NextResponse.json({ success: false, message: 'MongoDB is required to load certificate designs.', error: err.message }, { status: 503 });
   }
-
-  const store = getMemoryStore();
-  const designs = store.certificateDesigns || (store.certificateDesign ? [store.certificateDesign] : []);
-  return NextResponse.json({ success: true, data: designs, source: 'memory' });
 }
 
 export async function POST(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     const design = normalizeDesign(body, randomUUID());
-    const conn = await connectToDatabase();
-
-    if (conn) {
-      const savedDesign = await CertificateDesign.create(design);
-      return NextResponse.json({ success: true, data: savedDesign, source: 'mongodb' }, { status: 201 });
-    }
-
-    const store = getMemoryStore();
-    if (!store.certificateDesigns) store.certificateDesigns = [];
-    store.certificateDesigns.unshift(design);
-    return NextResponse.json({ success: true, data: design, source: 'memory' }, { status: 201 });
+    await connectToDatabase();
+    const savedDesign = await CertificateDesign.create(design);
+    return NextResponse.json({ success: true, data: savedDesign, source: 'mongodb' }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ success: false, message: err.message }, { status: 400 });
   }
@@ -93,34 +83,23 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     if (!body.key) {
       return NextResponse.json({ success: false, message: 'Design key is required.' }, { status: 400 });
     }
     const design = normalizeDesign(body, String(body.key));
-    const conn = await connectToDatabase();
-
-    if (conn) {
-      const savedDesign = await CertificateDesign.findOneAndUpdate(
-        { key: design.key },
-        { $set: design },
-        { new: true, runValidators: true }
-      ).lean();
-      if (!savedDesign) {
-        return NextResponse.json({ success: false, message: 'Certificate design not found.' }, { status: 404 });
-      }
-      return NextResponse.json({ success: true, data: savedDesign, source: 'mongodb' });
-    }
-
-    const store = getMemoryStore();
-    const designs = store.certificateDesigns || [];
-    const index = designs.findIndex(item => item.key === design.key);
-    if (index < 0) {
+    await connectToDatabase();
+    const savedDesign = await CertificateDesign.findOneAndUpdate(
+      { key: design.key },
+      { $set: design },
+      { new: true, runValidators: true }
+    ).lean();
+    if (!savedDesign) {
       return NextResponse.json({ success: false, message: 'Certificate design not found.' }, { status: 404 });
     }
-    designs[index] = design;
-    store.certificateDesigns = designs;
-    return NextResponse.json({ success: true, data: design, source: 'memory' });
+    return NextResponse.json({ success: true, data: savedDesign, source: 'mongodb' });
   } catch (err) {
     return NextResponse.json({ success: false, message: err.message }, { status: 400 });
   }
@@ -128,29 +107,20 @@ export async function PUT(request) {
 
 export async function DELETE(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
     if (!key) {
       return NextResponse.json({ success: false, message: 'Design key is required.' }, { status: 400 });
     }
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      const deletedDesign = await CertificateDesign.findOneAndDelete({ key });
-      if (!deletedDesign) {
-        return NextResponse.json({ success: false, message: 'Certificate design not found.' }, { status: 404 });
-      }
-      return NextResponse.json({ success: true, data: deletedDesign, source: 'mongodb' });
-    }
-
-    const store = getMemoryStore();
-    const designs = store.certificateDesigns || [];
-    const retainedDesigns = designs.filter(design => design.key !== key);
-    if (retainedDesigns.length === designs.length) {
+    await connectToDatabase();
+    const deletedDesign = await CertificateDesign.findOneAndDelete({ key });
+    if (!deletedDesign) {
       return NextResponse.json({ success: false, message: 'Certificate design not found.' }, { status: 404 });
     }
-    store.certificateDesigns = retainedDesigns;
-    return NextResponse.json({ success: true, source: 'memory' });
+    return NextResponse.json({ success: true, data: deletedDesign, source: 'mongodb' });
   } catch (err) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }

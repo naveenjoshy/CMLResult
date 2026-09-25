@@ -25,7 +25,7 @@ Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and 
 
 ### Admin portal (`/admin`)
 
-- Password/PIN gate, with the password configured using `ADMIN_PASSWORD`. A successful login is remembered for the browser session.
+- Password gate backed by a signed, HTTP-only, 12-hour session cookie. Configure a unique `ADMIN_PASSWORD` with at least 16 characters.
 - **Results and scoring:** assign first, second, or third place and grades A, B, or C; points recalculate for candidates and their Mekhalas and Parishes. Update event status between Upcoming, In Progress, and Completed.
 - **Event management:** add, edit, and delete events; configure eligible sections, gender, description, stage details, status, and placement/grade point values. Choose combined male/female eligibility or create separate Male and Female events, with candidates shown only the matching event. Create separate events per selected section or combine sections into one event.
 - **Candidate management:** search, add, edit, and delete candidates. Admin registration bypasses the public registration deadline. Issue sequential `CML-101`-style chest numbers to candidates who do not have one, or edit a candidate's number directly.
@@ -39,7 +39,7 @@ Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and 
 
 - Node.js compatible with Next.js 15
 - npm
-- MongoDB Atlas or another MongoDB deployment for persistent data (optional for trying the app with the in-memory store)
+- MongoDB Atlas or another MongoDB deployment
 
 ## Setup
 
@@ -47,7 +47,7 @@ Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and 
 npm install
 ```
 
-Create `.env.local` in the project root. For persistent MongoDB storage, configure:
+Create `.env.local` in the project root and configure the required database connection:
 
 ```env
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
@@ -56,9 +56,9 @@ ADMIN_PASSWORD=replace-with-a-strong-password
 REGISTRATION_END_DATE=2026-10-01T23:59:00
 ```
 
-`MONGODB_DB` defaults to `CMLResult`. `ADMIN_PASSWORD` defaults to `admin123` if omitted; set a strong password before deployment. `REGISTRATION_END_DATE` is optional; when unset or invalid, public registration remains open. Set it to a date/time accepted by JavaScript's `Date` parser.
+`MONGODB_DB` defaults to `CMLResult`. `ADMIN_PASSWORD` is required for admin login and must be a unique password of at least 16 characters; there is no default password. `REGISTRATION_END_DATE` is optional; when unset or invalid, public registration remains open. Set it to a date/time accepted by JavaScript's `Date` parser.
 
-When `MONGODB_URI` is not configured or MongoDB is unavailable, the app uses its in-memory fallback store with sample data. Changes in this mode are temporary and are lost when the server restarts. Use MongoDB for persistent event and candidate data.
+MongoDB is required for all application data. If it is unconfigured or unavailable, API requests fail and the admin navigation shows `DB: Offline`; the app does not switch to local sample data.
 
 ## Run
 

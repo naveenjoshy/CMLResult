@@ -14,10 +14,13 @@ export async function GET() {
       error: status.error,
     });
   } catch (error) {
+    const status = getDbStatus();
     return NextResponse.json({
-      success: false,
+      success: true,
       connected: false,
-      error: error.message,
-    }, { status: 500 });
+      status: status.status,
+      dbName: status.dbName,
+      isConfigured: status.isConfigured,
+    });
   }
 }

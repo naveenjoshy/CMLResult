@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const isAdminRoute = pathname.startsWith('/admin');
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [dbInfo, setDbInfo] = useState({
     connected: false,
     status: 'checking',
@@ -14,6 +16,30 @@ export default function Navbar() {
   });
 
   const isPublicPage = pathname === '/' || pathname === '/register';
+
+  useEffect(() => {
+    if (!isAdminRoute) {
+      setAdminAuthenticated(false);
+      return;
+    }
+
+    let active = true;
+    async function checkAdminSession() {
+      try {
+        const response = await fetch('/api/admin/session', { cache: 'no-store' });
+        if (active) setAdminAuthenticated(response.ok);
+      } catch (err) {
+        if (active) setAdminAuthenticated(false);
+      }
+    }
+
+    checkAdminSession();
+    window.addEventListener('cml-admin-session-changed', checkAdminSession);
+    return () => {
+      active = false;
+      window.removeEventListener('cml-admin-session-changed', checkAdminSession);
+    };
+  }, [isAdminRoute]);
 
   useEffect(() => {
     if (isPublicPage) return; // Do not check DB status on public shared pages
@@ -108,34 +134,36 @@ export default function Navbar() {
           </div>
         </Link>
 
-        <nav>
-          <ul className="nav-links">
-            <li>
-              <Link href="/" className={`nav-link ${pathname === '/' ? 'active' : ''}`}>
-                <span>📊</span> Dashboard
-              </Link>
-            </li>
-            <li>
-              <Link href="/register" className={`nav-link ${pathname === '/register' ? 'active' : ''}`}>
-                <span>✍️</span> Register
-              </Link>
-            </li>
-            <li>
-              <Link href="/admin" className={`nav-link ${pathname.startsWith('/admin') ? 'active' : ''}`}>
-                <span>⚙️</span> Admin Portal
-              </Link>
-            </li>
-          </ul>
-        </nav>
+        {(!isAdminRoute || adminAuthenticated) && (
+          <nav>
+            <ul className="nav-links">
+              <li>
+                <Link href="/" className={`nav-link ${pathname === '/' ? 'active' : ''}`}>
+                  <span>📊</span> Dashboard
+                </Link>
+              </li>
+              <li>
+                <Link href="/register" className={`nav-link ${pathname === '/register' ? 'active' : ''}`}>
+                  <span>✍️</span> Register
+                </Link>
+              </li>
+              <li>
+                <Link href="/admin" className={`nav-link ${pathname.startsWith('/admin') ? 'active' : ''}`}>
+                  <span>⚙️</span> Admin Portal
+                </Link>
+              </li>
+            </ul>
+          </nav>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div 
             className={`nav-status ${dbInfo.connected ? '' : 'offline'}`}
-            title={dbInfo.connected ? `Connected to MongoDB database: ${dbInfo.dbName}` : 'Running with local memory fallback'}
+            title={dbInfo.connected ? `Connected to MongoDB database: ${dbInfo.dbName}` : 'MongoDB connection unavailable'}
           >
             <span className="status-dot"></span>
             <span>
-              {dbInfo.connected ? `DB: ${dbInfo.dbName}` : 'DB: Local/Fallback'}
+              {dbInfo.connected ? `DB: ${dbInfo.dbName}` : 'DB: Offline'}
             </span>
           </div>
         </div>

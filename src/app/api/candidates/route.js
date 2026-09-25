@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Candidate from '@/models/Candidate';
 import Event from '@/models/Event';
-import { getMemoryStore } from '@/lib/memoryStore';
+import Mekhala from '@/models/Mekhala';
+import Parish from '@/models/Parish';
+import { isAdminAuthenticated, requireAdmin } from '@/lib/adminAuth';
 import { isRegistrationOpen } from '@/app/api/registration-status/route';
 import { isEventAvailableForCandidate, isEventAvailableForGender, isGroupEvent } from '@/lib/eventUtils';
 
@@ -36,72 +38,40 @@ function isCandidateEligibleForEvent(event, section, sex) {
 
 export async function GET(request) {
   try {
-    try {
-      const { searchParams } = new URL(request.url);
-      const event = searchParams.get('event');
-      const mekhala = searchParams.get('mekhala');
-      const parish = searchParams.get('parish');
-      const section = searchParams.get('section');
-      const search = searchParams.get('search');
-
-      const conn = await connectToDatabase();
-      if (conn) {
-        const query = {};
-        if (event) query.event = event;
-        if (mekhala) query.mekhala = mekhala;
-        if (parish) query.parish = parish;
-        if (section) query.section = section;
-        if (search) {
-          query.$or = [
-            { name: { $regex: search, $options: 'i' } },
-            { chestNo: { $regex: search, $options: 'i' } },
-            { houseName: { $regex: search, $options: 'i' } },
-            { phone: { $regex: search, $options: 'i' } },
-          ];
-        }
-
-        const candidates = await Candidate.find(query).sort({ createdAt: -1 });
-        return NextResponse.json({ success: true, data: candidates, source: 'mongodb' });
-      }
-    } catch (err) {
-      console.warn('[Candidates GET] MongoDB error, falling back to memory store:', err.message);
-    }
-
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const { searchParams } = new URL(request.url);
     const event = searchParams.get('event');
     const mekhala = searchParams.get('mekhala');
     const parish = searchParams.get('parish');
     const section = searchParams.get('section');
     const search = searchParams.get('search');
-
-    const store = getMemoryStore();
-    let list = [...store.candidates];
-
-    if (event) list = list.filter(c => c.event === event);
-    if (mekhala) list = list.filter(c => c.mekhala === mekhala);
-    if (parish) list = list.filter(c => c.parish === parish);
-    if (section) list = list.filter(c => c.section === section);
+    await connectToDatabase();
+    const query = {};
+    if (event) query.event = event;
+    if (mekhala) query.mekhala = mekhala;
+    if (parish) query.parish = parish;
+    if (section) query.section = section;
     if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(c => 
-        c.name.toLowerCase().includes(q) ||
-        (c.chestNo && c.chestNo.toLowerCase().includes(q)) ||
-        (c.houseName && c.houseName.toLowerCase().includes(q)) ||
-        (c.phone && c.phone.toLowerCase().includes(q))
-      );
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { chestNo: { $regex: search, $options: 'i' } },
+        { houseName: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+      ];
     }
-
-    return NextResponse.json({ success: true, data: list, source: 'memory' });
+    const candidates = await Candidate.find(query).sort({ createdAt: -1 });
+    return NextResponse.json({ success: true, data: candidates, source: 'mongodb' });
   } catch (fatalErr) {
-    console.error('[Candidates GET] Fatal error:', fatalErr);
-    return NextResponse.json({ success: false, message: fatalErr.message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'MongoDB is required to load candidates.', error: fatalErr.message }, { status: 503 });
   }
 }
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, houseName, dob, phone, parish, mekhala, section, sex, event, chestNo, isAdmin } = body;
+    const { name, houseName, dob, phone, parish, mekhala, section, sex, event, chestNo } = body;
+    const isAdmin = isAdminAuthenticated(request);
 
     // Check registration deadline for non-admin requests
     if (!isAdmin) {
@@ -135,11 +105,18 @@ export async function POST(request) {
     const normalizedDob = String(dob || '').trim();
     const normalizedEvent = event.trim();
 
-    const conn = await connectToDatabase();
-    const store = conn ? null : getMemoryStore();
-    const eventDoc = conn
-      ? await Event.findOne({ name: normalizedEvent })
-      : store.events.find(candidateEvent => candidateEvent.name === normalizedEvent);
+    await connectToDatabase();
+    const [eventDoc, parishDoc, mekhalaDoc] = await Promise.all([
+      Event.findOne({ name: normalizedEvent }),
+      Parish.findOne({ name: parish.trim() }),
+      Mekhala.findOne({ name: mekhala.trim() }),
+    ]);
+    if (!eventDoc) {
+      return NextResponse.json({ success: false, message: 'The selected event was not found.' }, { status: 400 });
+    }
+    if (!parishDoc || !mekhalaDoc || parishDoc.mekhala !== mekhala.trim()) {
+      return NextResponse.json({ success: false, message: 'Select a Parish that belongs to the selected Mekhala.' }, { status: 400 });
+    }
     const groupEvent = isGroupEvent(eventDoc);
 
     if (!normalizedDob && !groupEvent) {
@@ -164,12 +141,11 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
-    if (conn) {
-      const position = body.position || 'None';
-      const grade = body.grade || 'None';
-      const totalPoints = calculatePoints(eventDoc, position, grade);
+    const position = body.position || 'None';
+    const grade = body.grade || 'None';
+    const totalPoints = calculatePoints(eventDoc, position, grade);
 
-      const candidate = await Candidate.create({
+    const candidate = await Candidate.create({
         chestNo: finalChestNo,
         name: name.trim(),
         houseName: houseName.trim(),
@@ -183,35 +159,9 @@ export async function POST(request) {
         position,
         grade,
         totalPoints,
-      });
+    });
 
-      return NextResponse.json({ success: true, data: candidate, source: 'mongodb' }, { status: 201 });
-    }
-
-    const position = body.position || 'None';
-    const grade = body.grade || 'None';
-    const totalPoints = calculatePoints(eventDoc, position, grade);
-
-    const newCandidate = {
-      _id: 'c_' + Date.now(),
-      chestNo: finalChestNo,
-      name: name.trim(),
-      houseName: houseName.trim(),
-      dob: normalizedDob,
-      phone: (phone || '').trim(),
-      parish: parish.trim(),
-      mekhala: mekhala.trim(),
-      section: candidateSection,
-      sex: sex.trim(),
-      event: normalizedEvent,
-      position,
-      grade,
-      totalPoints,
-      createdAt: new Date(),
-    };
-
-    store.candidates.unshift(newCandidate);
-    return NextResponse.json({ success: true, data: newCandidate, source: 'memory' }, { status: 201 });
+    return NextResponse.json({ success: true, data: candidate, source: 'mongodb' }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
@@ -219,6 +169,8 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const body = await request.json();
     const { id, ...fields } = body;
 
@@ -233,53 +185,20 @@ export async function PUT(request) {
       }
     }
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      const candidate = await Candidate.findById(id);
-      if (!candidate) {
-        return NextResponse.json({ success: false, message: 'Candidate not found' }, { status: 404 });
-      }
-
-      // If position, grade or event is updated, recalculate points
-      const targetEventName = fields.event || candidate.event;
-      const targetSection = fields.section || candidate.section;
-      const targetSex = fields.sex || candidate.sex;
-      const targetPosition = fields.position !== undefined ? fields.position : candidate.position;
-      const targetGrade = fields.grade !== undefined ? fields.grade : candidate.grade;
-
-      const eventDoc = await Event.findOne({ name: targetEventName });
-      if ((fields.event || fields.section || fields.sex) && eventDoc && !isCandidateEligibleForEvent(eventDoc, targetSection, targetSex)) {
-        return NextResponse.json({
-          success: false,
-          message: `The event "${targetEventName}" is not available for a ${targetSex} candidate in section "${targetSection}".`,
-        }, { status: 400 });
-      }
-
-      const totalPoints = calculatePoints(eventDoc, targetPosition, targetGrade);
-
-      const updateData = {
-        ...fields,
-        totalPoints,
-      };
-
-      const updated = await Candidate.findByIdAndUpdate(id, updateData, { new: true });
-      return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
-    }
-
-    const store = getMemoryStore();
-    const idx = store.candidates.findIndex(c => c._id === id);
-    if (idx === -1) {
+    await connectToDatabase();
+    const candidate = await Candidate.findById(id);
+    if (!candidate) {
       return NextResponse.json({ success: false, message: 'Candidate not found' }, { status: 404 });
     }
 
-    const current = store.candidates[idx];
-    const targetEventName = fields.event || current.event;
-    const targetSection = fields.section || current.section;
-    const targetSex = fields.sex || current.sex;
-    const targetPosition = fields.position !== undefined ? fields.position : current.position;
-    const targetGrade = fields.grade !== undefined ? fields.grade : current.grade;
+    // If position, grade or event is updated, recalculate points
+    const targetEventName = fields.event || candidate.event;
+    const targetSection = fields.section || candidate.section;
+    const targetSex = fields.sex || candidate.sex;
+    const targetPosition = fields.position !== undefined ? fields.position : candidate.position;
+    const targetGrade = fields.grade !== undefined ? fields.grade : candidate.grade;
 
-    const eventDoc = store.events.find(e => e.name === targetEventName);
+    const eventDoc = await Event.findOne({ name: targetEventName });
     if ((fields.event || fields.section || fields.sex) && eventDoc && !isCandidateEligibleForEvent(eventDoc, targetSection, targetSex)) {
       return NextResponse.json({
         success: false,
@@ -289,13 +208,13 @@ export async function PUT(request) {
 
     const totalPoints = calculatePoints(eventDoc, targetPosition, targetGrade);
 
-    store.candidates[idx] = {
-      ...current,
+    const updateData = {
       ...fields,
       totalPoints,
     };
 
-    return NextResponse.json({ success: true, data: store.candidates[idx], source: 'memory' });
+    const updated = await Candidate.findByIdAndUpdate(id, updateData, { new: true });
+    return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
@@ -303,6 +222,8 @@ export async function PUT(request) {
 
 export async function DELETE(request) {
   try {
+    const unauthorized = requireAdmin(request);
+    if (unauthorized) return unauthorized;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -310,15 +231,9 @@ export async function DELETE(request) {
       return NextResponse.json({ success: false, message: 'ID is required' }, { status: 400 });
     }
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      await Candidate.findByIdAndDelete(id);
-      return NextResponse.json({ success: true, message: 'Candidate deleted' });
-    }
-
-    const store = getMemoryStore();
-    store.candidates = store.candidates.filter(c => c._id !== id);
-    return NextResponse.json({ success: true, message: 'Candidate deleted from memory' });
+    await connectToDatabase();
+    await Candidate.findByIdAndDelete(id);
+    return NextResponse.json({ success: true, message: 'Candidate deleted' });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

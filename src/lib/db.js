@@ -4,7 +4,6 @@ import mongoose from 'mongoose';
  * MongoDB connection helper for Next.js
  * Database name: CMLResult
  */
-const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || 'CMLResult';
 
 let cached = global.mongoose;
@@ -23,7 +22,7 @@ export async function connectToDatabase() {
   if (!uri || uri.trim() === '') {
     cached.status = 'unconfigured';
     cached.error = 'MONGODB_URI is not set in environment';
-    return null;
+    throw new Error(cached.error);
   }
 
   if (!cached.promise) {
@@ -43,7 +42,7 @@ export async function connectToDatabase() {
       cached.error = err.message;
       cached.promise = null;
       console.error('[MongoDB] Connection error:', err.message);
-      return null;
+      throw err;
     });
   }
 
@@ -53,6 +52,7 @@ export async function connectToDatabase() {
     cached.promise = null;
     cached.status = 'error';
     cached.error = e.message;
+    throw e;
   }
 
   return cached.conn;
