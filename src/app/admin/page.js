@@ -14,6 +14,7 @@ import {
   getSectionEventName,
 } from '@/lib/eventUtils';
 import PrintSheetModal from '@/components/PrintSheetModal';
+import ResultPosterModal from '@/components/ResultPosterModal';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -33,6 +34,21 @@ export default function AdminPage() {
     setPrintModalState({
       isOpen: true,
       type,
+      event: eventObj,
+      candidates: eventCandidates || [],
+    });
+  };
+
+  // Result Poster modal state
+  const [posterModalState, setPosterModalState] = useState({
+    isOpen: false,
+    event: null,
+    candidates: [],
+  });
+
+  const openPosterModal = (eventObj, eventCandidates) => {
+    setPosterModalState({
+      isOpen: true,
       event: eventObj,
       candidates: eventCandidates || [],
     });
@@ -176,7 +192,11 @@ export default function AdminPage() {
       const json = await res.json();
       if (json.success) {
         setCandidates(prev => prev.map(c => c._id === candidateId ? json.data : c));
-        notify('success', 'Candidate result & points updated!');
+        if (field === 'position' && value && value !== 'None') {
+          notify('success', `Position set to ${value}! Winner poster is ready to download.`);
+        } else {
+          notify('success', 'Candidate result & points updated!');
+        }
       } else {
         notify('error', json.message || 'Failed to update result');
       }
@@ -763,12 +783,32 @@ export default function AdminPage() {
                     </button>
                     <button
                       type="button"
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-secondary btn-sm"
                       style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
                       onClick={() => openPrintModal('result', selectedEvent, candidatesForSelectedEvent)}
                       title="Print official result sheet for this event"
                     >
                       🏆 Result Sheet
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        padding: '0.45rem 0.85rem',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        border: 'none',
+                        color: '#fff',
+                        boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)'
+                      }}
+                      onClick={() => openPosterModal(selectedEvent, candidatesForSelectedEvent)}
+                      title="Download Winner Announcement Poster (1st, 2nd, 3rd)"
+                    >
+                      🎨 Winner Poster
                     </button>
                   </div>
                 )}
@@ -797,6 +837,54 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+
+          {/* Post-submit Winner Poster Banner */}
+          {selectedEvent && candidatesForSelectedEvent.some(c => c.position && c.position !== 'None') && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(59, 130, 246, 0.08))',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.1rem 1.5rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '1rem',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <span style={{ fontSize: '2.2rem' }}>🎉</span>
+                <div>
+                  <strong style={{ color: '#fbbf24', fontSize: '1.05rem', display: 'block' }}>
+                    Winners Recorded for {selectedEvent.name}!
+                  </strong>
+                  <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    1st, 2nd, and 3rd positions have been submitted. You can download the official high-resolution winner announcement poster for printing or social media status.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  border: 'none',
+                  color: '#fff',
+                  fontWeight: 700,
+                  padding: '0.6rem 1.35rem',
+                  fontSize: '0.9rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  boxShadow: '0 4px 15px rgba(245, 158, 11, 0.4)'
+                }}
+                onClick={() => openPosterModal(selectedEvent, candidatesForSelectedEvent)}
+              >
+                🎨 Download Result Poster (PNG)
+              </button>
+            </div>
+          )}
 
           {/* Candidates in selected event */}
           <div className="table-wrapper">
@@ -1248,6 +1336,15 @@ export default function AdminPage() {
                           onClick={() => openPrintModal('result', ev, candidates.filter(c => c.event === ev.name))}
                         >
                           🏆 Result
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Download Winner Announcement Poster (1st, 2nd, 3rd)"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', color: '#fbbf24' }}
+                          onClick={() => openPosterModal(ev, candidates.filter(c => c.event === ev.name))}
+                        >
+                          🎨 Poster
                         </button>
                         <button
                           type="button"
@@ -2255,6 +2352,14 @@ export default function AdminPage() {
         initialType={printModalState.type}
         event={printModalState.event}
         candidates={printModalState.candidates}
+      />
+
+      {/* Winner Announcement Poster Modal (1st, 2nd, 3rd) */}
+      <ResultPosterModal
+        isOpen={posterModalState.isOpen}
+        onClose={() => setPosterModalState(prev => ({ ...prev, isOpen: false }))}
+        event={posterModalState.event}
+        candidates={posterModalState.candidates}
       />
     </div>
   );
