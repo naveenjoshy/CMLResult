@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  SECTION_OPTIONS,
   GENDER_OPTIONS,
   isEventAvailableForSection,
   isEventAvailableForGender,
@@ -18,12 +17,14 @@ import {
 } from '@/lib/eventUtils';
 import PrintSheetModal from '@/components/PrintSheetModal';
 import ResultPosterModal from '@/components/ResultPosterModal';
+import CertificateDesigner from '@/components/CertificateDesigner';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [activeAdminTab, setActiveAdminTab] = useState('results'); // 'results', 'events', 'candidates', 'mekhala', 'sakha', 'categories', 'db'
+  const [activeAdminTab, setActiveAdminTab] = useState('results'); // 'results', 'events', 'candidates', 'mekhala', 'parish', 'categories', 'db'
+  const [certificateLaunch, setCertificateLaunch] = useState(null);
 
   // Print modal state
   const [printModalState, setPrintModalState] = useState({
@@ -59,6 +60,10 @@ export default function AdminPage() {
 
   // Category & DOB Rules state
   const [categories, setCategories] = useState([]);
+  const sectionOptions = categories
+    .slice()
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+    .map(category => category.name);
   const [newCategory, setNewCategory] = useState({
     name: '',
     minDob: '',
@@ -67,13 +72,15 @@ export default function AdminPage() {
     order: 10,
   });
   const [editingCategory, setEditingCategory] = useState(null);
-  const [testDob, setTestDob] = useState('');
 
   // Data states
   const [events, setEvents] = useState([]);
+  const [managedEventNameSearch, setManagedEventNameSearch] = useState('');
+  const [managedEventCategoryFilter, setManagedEventCategoryFilter] = useState('ALL');
+  const [managedEventGenderFilter, setManagedEventGenderFilter] = useState('ALL');
   const [candidates, setCandidates] = useState([]);
   const [mekhalas, setMekhalas] = useState([]);
-  const [sakhas, setSakhas] = useState([]);
+  const [parishes, setParishes] = useState([]);
   const [dbStatus, setDbStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
@@ -84,8 +91,8 @@ export default function AdminPage() {
   // Event form state
   const [newEvent, setNewEvent] = useState({
     name: '',
-    categories: ['Junior'],
-    category: 'Junior',
+    categories: [],
+    category: '',
     gender: 'Both',
     description: '',
     stageNumber: '',
@@ -98,9 +105,11 @@ export default function AdminPage() {
   // Event editing state
   const [editingEvent, setEditingEvent] = useState(null);
 
-  // Mekhala & Sakha form states
+  // Mekhala & Parish form states
   const [newMekhala, setNewMekhala] = useState({ name: '', code: '' });
-  const [newSakha, setNewSakha] = useState({ name: '', mekhala: '' });
+  const [editingMekhala, setEditingMekhala] = useState(null);
+  const [newParish, setNewParish] = useState({ name: '', mekhala: '' });
+  const [editingParish, setEditingParish] = useState(null);
 
   // Candidate editing modal state
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -108,8 +117,8 @@ export default function AdminPage() {
   // Candidate search/filter
   const [candidateSearch, setCandidateSearch] = useState('');
   const [mekhalaSearch, setMekhalaSearch] = useState('');
-  const [sakhaSearch, setSakhaSearch] = useState('');
-  const [sakhaMekhalaFilter, setSakhaMekhalaFilter] = useState('ALL');
+  const [parishSearch, setParishSearch] = useState('');
+  const [parishMekhalaFilter, setParishMekhalaFilter] = useState('ALL');
 
   // Check login from sessionStorage on mount
   useEffect(() => {
@@ -127,7 +136,7 @@ export default function AdminPage() {
         fetch('/api/events'),
         fetch('/api/candidates'),
         fetch('/api/mekhalas'),
-        fetch('/api/sakhas'),
+        fetch('/api/parishes'),
         fetch('/api/db-status'),
         fetch('/api/categories'),
       ]);
@@ -146,14 +155,29 @@ export default function AdminPage() {
         }
       }
       if (dataC.success) setCandidates(dataC.data || []);
-      if (dataCat.success) setCategories(dataCat.data || []);
+      if (dataCat.success) {
+        const loadedCategories = dataCat.data || [];
+        const loadedSectionNames = loadedCategories.map(category => category.name);
+        setCategories(loadedCategories);
+        setNewEvent(prev => {
+          const retainedSections = prev.categories.filter(section => loadedSectionNames.includes(section));
+          const selectedSections = retainedSections.length > 0
+            ? retainedSections
+            : loadedSectionNames.slice(0, 1);
+          return {
+            ...prev,
+            categories: selectedSections,
+            category: selectedSections.join(', '),
+          };
+        });
+      }
       if (dataM.success) {
         setMekhalas(dataM.data || []);
-        if (dataM.data?.length > 0 && !newSakha.mekhala) {
-          setNewSakha(prev => ({ ...prev, mekhala: dataM.data[0].name }));
+        if (dataM.data?.length > 0 && !newParish.mekhala) {
+          setNewParish(prev => ({ ...prev, mekhala: dataM.data[0].name }));
         }
       }
-      if (dataS.success) setSakhas(dataS.data || []);
+      if (dataS.success) setParishes(dataS.data || []);
       if (dataD.success) setDbStatus(dataD);
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -282,8 +306,8 @@ export default function AdminPage() {
         );
         setNewEvent({
           name: '',
-          categories: ['Junior'],
-          category: 'Junior',
+          categories: sectionOptions.slice(0, 1),
+          category: sectionOptions[0] || '',
           gender: 'Both',
           description: '',
           stageNumber: '',
@@ -383,6 +407,43 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveMekhalaEdit = async (e) => {
+    e.preventDefault();
+    if (!editingMekhala) return;
+    if (!editingMekhala.name.trim()) {
+      notify('error', 'Mekhala name is required');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/mekhalas', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingMekhala._id,
+          name: editingMekhala.name,
+          code: editingMekhala.code || '',
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        const previousName = mekhalas.find(mekhala => mekhala._id === editingMekhala._id)?.name;
+        setMekhalas(prev => prev.map(mekhala => mekhala._id === json.data._id ? json.data : mekhala));
+        if (previousName && previousName !== json.data.name) {
+          setParishes(prev => prev.map(parish => parish.mekhala === previousName ? { ...parish, mekhala: json.data.name } : parish));
+          setCandidates(prev => prev.map(candidate => candidate.mekhala === previousName ? { ...candidate, mekhala: json.data.name } : candidate));
+          setNewParish(prev => prev.mekhala === previousName ? { ...prev, mekhala: json.data.name } : prev);
+        }
+        setEditingMekhala(null);
+        notify('success', `Mekhala "${json.data.name}" updated.`);
+      } else {
+        notify('error', json.message || 'Failed to update Mekhala');
+      }
+    } catch (err) {
+      notify('error', 'Failed to update Mekhala');
+    }
+  };
+
   const handleDeleteMekhala = async (id, name) => {
     if (!confirm(`Delete Mekhala "${name}"?`)) return;
     try {
@@ -397,44 +458,75 @@ export default function AdminPage() {
     }
   };
 
-  // 4. SAKHA HANDLERS
-  const handleAddSakha = async (e) => {
+  // 4. PARISH HANDLERS
+  const handleAddParish = async (e) => {
     e.preventDefault();
-    if (!newSakha.name.trim() || !newSakha.mekhala) {
-      notify('error', 'Please provide Sakha name and select Mekhala');
+    if (!newParish.name.trim() || !newParish.mekhala) {
+      notify('error', 'Please provide Parish name and select Mekhala');
       return;
     }
 
     try {
-      const res = await fetch('/api/sakhas', {
+      const res = await fetch('/api/parishes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSakha),
+        body: JSON.stringify(newParish),
       });
       const json = await res.json();
       if (json.success) {
-        setSakhas(prev => [...prev, json.data]);
-        notify('success', `Sakha "${newSakha.name}" added!`);
-        setNewSakha(prev => ({ ...prev, name: '' }));
+        setParishes(prev => [...prev, json.data]);
+        notify('success', `Parish "${newParish.name}" added!`);
+        setNewParish(prev => ({ ...prev, name: '' }));
       } else {
-        notify('error', json.message || 'Failed to add Sakha');
+        notify('error', json.message || 'Failed to add Parish');
       }
     } catch (err) {
-      notify('error', 'Error adding Sakha');
+      notify('error', 'Error adding Parish');
     }
   };
 
-  const handleDeleteSakha = async (id, name) => {
-    if (!confirm(`Delete Sakha "${name}"?`)) return;
+  const handleSaveParishEdit = async (e) => {
+    e.preventDefault();
+    if (!editingParish) return;
+    if (!editingParish.name.trim() || !editingParish.mekhala) {
+      notify('error', 'Please provide Parish name and select Mekhala');
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/sakhas?id=${id}`, { method: 'DELETE' });
+      const res = await fetch('/api/parishes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingParish._id,
+          name: editingParish.name,
+          mekhala: editingParish.mekhala,
+        }),
+      });
       const json = await res.json();
       if (json.success) {
-        setSakhas(prev => prev.filter(s => s._id !== id));
-        notify('success', 'Sakha deleted');
+        setParishes(prev => prev.map(parish => parish._id === json.data._id ? json.data : parish));
+        setEditingParish(null);
+        notify('success', `Parish "${json.data.name}" updated.`);
+      } else {
+        notify('error', json.message || 'Failed to update Parish');
       }
     } catch (err) {
-      notify('error', 'Failed to delete Sakha');
+      notify('error', 'Failed to update Parish');
+    }
+  };
+
+  const handleDeleteParish = async (id, name) => {
+    if (!confirm(`Delete Parish "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/parishes?id=${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) {
+        setParishes(prev => prev.filter(s => s._id !== id));
+        notify('success', 'Parish deleted');
+      }
+    } catch (err) {
+      notify('error', 'Failed to delete Parish');
     }
   };
 
@@ -455,7 +547,7 @@ export default function AdminPage() {
           dob: editingCandidate.dob,
           phone: editingCandidate.phone,
           mekhala: editingCandidate.mekhala,
-          sakha: editingCandidate.sakha,
+          parish: editingCandidate.parish,
           section: editingCandidate.section,
           sex: editingCandidate.sex,
           event: editingCandidate.event,
@@ -526,7 +618,7 @@ export default function AdminPage() {
     dob: '',
     phone: '',
     mekhala: '',
-    sakha: '',
+    parish: '',
     section: 'Junior',
     sex: 'Male',
     event: '',
@@ -553,7 +645,7 @@ export default function AdminPage() {
           dob: '',
           phone: '',
           mekhala: mekhalas[0]?.name || '',
-          sakha: '',
+          parish: '',
           section: 'Junior',
           sex: 'Male',
           event: validForJunior[0]?.name || '',
@@ -711,6 +803,23 @@ export default function AdminPage() {
   const candidatesForSelectedEvent = selectedEvent
     ? candidates.filter(c => c.event === selectedEvent.name)
     : [];
+  const managedEventCategories = Array.from(new Set([
+    ...sectionOptions,
+    ...events.flatMap(event => getEventCategories(event)),
+  ]));
+  const filteredManagedEvents = events.filter(event => {
+    const matchesName = !managedEventNameSearch.trim() ||
+      (event.name || '').toLowerCase().includes(managedEventNameSearch.trim().toLowerCase());
+    const matchesCategory = managedEventCategoryFilter === 'ALL' ||
+      getEventCategories(event).some(category => category.toLowerCase() === managedEventCategoryFilter.toLowerCase());
+    const eventGender = (event.gender || 'Both').toLowerCase();
+    const matchesGender = managedEventGenderFilter === 'ALL' || (
+      managedEventGenderFilter === 'Both'
+        ? ['both', 'combined'].includes(eventGender)
+        : eventGender === managedEventGenderFilter.toLowerCase()
+    );
+    return matchesName && matchesCategory && matchesGender;
+  });
 
   // Filtered candidates for candidate management tab
   const filteredCandidates = candidates.filter(c => {
@@ -721,7 +830,7 @@ export default function AdminPage() {
       (c.chestNo && c.chestNo.toLowerCase().includes(q)) ||
       c.event.toLowerCase().includes(q) ||
       c.mekhala.toLowerCase().includes(q) ||
-      c.sakha.toLowerCase().includes(q)
+      c.parish.toLowerCase().includes(q)
     );
   });
 
@@ -735,12 +844,12 @@ export default function AdminPage() {
     );
   });
 
-  // Filtered Sakhas for Sakha management tab
-  const filteredSakhas = sakhas.filter(s => {
-    const matchesMekhala = sakhaMekhalaFilter === 'ALL' || s.mekhala === sakhaMekhalaFilter;
+  // Filtered Parishes for Parish management tab
+  const filteredParishes = parishes.filter(s => {
+    const matchesMekhala = parishMekhalaFilter === 'ALL' || s.mekhala === parishMekhalaFilter;
     if (!matchesMekhala) return false;
-    if (!sakhaSearch.trim()) return true;
-    const q = sakhaSearch.toLowerCase();
+    if (!parishSearch.trim()) return true;
+    const q = parishSearch.toLowerCase();
     return (
       s.name.toLowerCase().includes(q) ||
       (s.mekhala && s.mekhala.toLowerCase().includes(q))
@@ -759,7 +868,7 @@ export default function AdminPage() {
             Admin Dashboard
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Manage events, register Sakha/Mekhala, edit candidates, and record winner positions.
+            Manage events, register Parish/Mekhala, edit candidates, and record winner positions.
           </p>
         </div>
 
@@ -791,8 +900,9 @@ export default function AdminPage() {
         </div>
       )}
 
+      <div className="admin-workspace">
       {/* Admin Sub Navigation */}
-      <div className="tabs-nav">
+      <nav className="tabs-nav admin-sidebar" aria-label="Admin sections">
         <button
           type="button"
           className={`tab-btn ${activeAdminTab === 'results' ? 'active' : ''}`}
@@ -823,10 +933,10 @@ export default function AdminPage() {
         </button>
         <button
           type="button"
-          className={`tab-btn ${activeAdminTab === 'sakha' ? 'active' : ''}`}
-          onClick={() => setActiveAdminTab('sakha')}
+          className={`tab-btn ${activeAdminTab === 'parish' ? 'active' : ''}`}
+          onClick={() => setActiveAdminTab('parish')}
         >
-          🏢 Sakhas ({sakhas.length})
+          🏢 Parishes ({parishes.length})
         </button>
         <button
           type="button"
@@ -835,7 +945,24 @@ export default function AdminPage() {
         >
           🎯 Sections & DOB Rules ({categories.length})
         </button>
-      </div>
+        <button
+          type="button"
+          className={`tab-btn ${activeAdminTab === 'certificates' ? 'active' : ''}`}
+          onClick={() => setActiveAdminTab('certificates')}
+        >
+          📜 Certificates
+        </button>
+      </nav>
+
+      <div className="admin-workspace-content">
+      {activeAdminTab === 'certificates' && (
+        <CertificateDesigner
+          candidates={candidates}
+          events={events}
+          initialEventName={certificateLaunch?.eventName}
+          initialCandidateIds={certificateLaunch?.candidateIds}
+        />
+      )}
 
       {/* TAB 1: RESULT ENTRY & SCORING */}
       {activeAdminTab === 'results' && (
@@ -845,7 +972,7 @@ export default function AdminPage() {
               <div>
                 <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '0.25rem' }}>Select Event to Enter Results</h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                  Assigning positions and grades immediately calculates candidate, Sakha, and Mekhala points.
+                  Assigning positions and grades immediately calculates candidate, Parish, and Mekhala points.
                 </p>
               </div>
 
@@ -999,7 +1126,7 @@ export default function AdminPage() {
                 <tr>
                   <th>Chest No</th>
                   <th>Candidate Name</th>
-                  <th>Sakha</th>
+                  <th>Parish</th>
                   <th>Mekhala</th>
                   <th style={{ minWidth: '150px' }}>Position</th>
                   <th style={{ minWidth: '130px' }}>Grade</th>
@@ -1025,7 +1152,7 @@ export default function AdminPage() {
                         <strong style={{ color: '#fff' }}>{cand.name}</strong>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{cand.houseName}</div>
                       </td>
-                      <td>{cand.sakha}</td>
+                      <td>{cand.parish}</td>
                       <td>{cand.mekhala}</td>
                       <td>
                         <select
@@ -1069,9 +1196,9 @@ export default function AdminPage() {
 
       {/* TAB 2: MANAGE EVENTS */}
       {activeAdminTab === 'events' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 400px) 1fr', gap: '2rem' }}>
+        <div className="event-management-layout">
           {/* Add Event Form */}
-          <div className="glass-panel" style={{ padding: '2rem' }}>
+          <div className="glass-panel" style={{ padding: '2rem', width: '100%' }}>
             <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '1.25rem' }}>Add New Event</h3>
             <form onSubmit={handleAddEvent}>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
@@ -1098,8 +1225,8 @@ export default function AdminPage() {
                       style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
                       onClick={() => setNewEvent(prev => ({
                         ...prev,
-                        categories: [...SECTION_OPTIONS],
-                        category: SECTION_OPTIONS.join(', ')
+                        categories: [...sectionOptions],
+                        category: sectionOptions.join(', ')
                       }))}
                     >
                       Select All
@@ -1128,7 +1255,7 @@ export default function AdminPage() {
                   borderRadius: '10px',
                   border: (newEvent.categories?.length === 0) ? '1px dashed #ef4444' : '1px solid rgba(255, 255, 255, 0.1)',
                 }}>
-                  {SECTION_OPTIONS.map((sec) => {
+                  {sectionOptions.map((sec) => {
                     const isSelected = newEvent.categories?.includes(sec);
                     return (
                       <label
@@ -1410,62 +1537,135 @@ export default function AdminPage() {
           </div>
 
           {/* Existing Events List */}
-          <div className="table-wrapper">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th>Event Name</th>
-                  <th>Categories / Sections</th>
-                  <th>Gender</th>
-                  <th>Position Pts (1/2/3)</th>
-                  <th>Grade Pts (A/B/C)</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map(ev => (
-                  <tr key={ev._id || ev.name}>
-                    <td>
-                      <strong style={{ color: '#fff' }}>{ev.name}</strong>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                        {getEventCategories(ev).map((cat, idx) => (
-                          <span key={idx} className="event-category-badge">{cat}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`gender-badge ${(ev.gender || 'Both').toLowerCase()}`}>
-                        {formatEventGender(ev)}
+          <div className="event-management-list">
+            <div className="event-management-toolbar">
+              <div className="event-management-toolbar-heading">
+                <h3>Events</h3>
+                <span>{filteredManagedEvents.length} of {events.length}</span>
+              </div>
+              <div className="event-management-filters">
+                <div className="search-box">
+                  <span className="search-icon">🔍</span>
+                  <input
+                    type="search"
+                    className="form-input"
+                    aria-label="Search events by name"
+                    placeholder="Search event name..."
+                    value={managedEventNameSearch}
+                    onChange={(e) => setManagedEventNameSearch(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="form-select"
+                  aria-label="Filter events by category"
+                  value={managedEventCategoryFilter}
+                  onChange={(e) => setManagedEventCategoryFilter(e.target.value)}
+                >
+                  <option value="ALL">All categories</option>
+                  {managedEventCategories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+                <select
+                  className="form-select"
+                  aria-label="Filter events by gender"
+                  value={managedEventGenderFilter}
+                  onChange={(e) => setManagedEventGenderFilter(e.target.value)}
+                >
+                  <option value="ALL">All genders</option>
+                  <option value="Both">Combined</option>
+                  <option value="Male">Male events</option>
+                  <option value="Female">Female events</option>
+                </select>
+                {(managedEventNameSearch || managedEventCategoryFilter !== 'ALL' || managedEventGenderFilter !== 'ALL') && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setManagedEventNameSearch('');
+                      setManagedEventCategoryFilter('ALL');
+                      setManagedEventGenderFilter('ALL');
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </div>
+            {events.length === 0 ? (
+              <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                No events created yet.
+              </div>
+            ) : filteredManagedEvents.length === 0 ? (
+              <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                No events match these filters.
+              </div>
+            ) : filteredManagedEvents.map(ev => (
+              <details key={ev._id || ev.name} className="event-management-card">
+                <summary className="event-management-summary">
+                  <span className="event-management-name">{ev.name}</span>
+                  <span className="event-management-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div className="event-management-details">
+                <div className="event-management-grid">
+                  <div className="event-management-field">
+                    <span className="event-management-label">Categories / Sections</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      {getEventCategories(ev).map((cat, idx) => (
+                        <span key={idx} className="event-category-badge">{cat}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="event-management-field">
+                    <span className="event-management-label">Gender</span>
+                    <span className={`gender-badge ${(ev.gender || 'Both').toLowerCase()}`}>
+                      {formatEventGender(ev)}
+                    </span>
+                  </div>
+                  <div className="event-management-field">
+                    <span className="event-management-label">Position Pts (1/2/3)</span>
+                    <span>{ev.points?.first ?? 5} / {ev.points?.second ?? 3} / {ev.points?.third ?? 1}</span>
+                  </div>
+                  <div className="event-management-field">
+                    <span className="event-management-label">Grade Pts (A/B/C)</span>
+                    <span>{ev.points?.gradeA ?? 5} / {ev.points?.gradeB ?? 3} / {ev.points?.gradeC ?? 1}</span>
+                  </div>
+                  <div className="event-management-field">
+                    <span className="event-management-label">Status</span>
+                    <div style={{ fontSize: '0.82rem' }}>
+                      <span className={`event-status ${
+                        ev.status === 'Completed' ? 'completed'
+                        : ev.status === 'Ongoing' ? 'ongoing'
+                        : ev.status === 'In Progress' ? 'progress'
+                        : 'upcoming'
+                      }`}>
+                        {ev.status === 'Ongoing' ? '🔴 Ongoing' : ev.status || 'Upcoming'}
                       </span>
-                    </td>
-                    <td>
-                      {ev.points?.first ?? 5} / {ev.points?.second ?? 3} / {ev.points?.third ?? 1}
-                    </td>
-                    <td>
-                      {ev.points?.gradeA ?? 5} / {ev.points?.gradeB ?? 3} / {ev.points?.gradeC ?? 1}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '0.82rem' }}>
-                        <span className={`event-status ${
-                          ev.status === 'Completed' ? 'completed'
-                          : ev.status === 'Ongoing' ? 'ongoing'
-                          : ev.status === 'In Progress' ? 'progress'
-                          : 'upcoming'
-                        }`}>
-                          {ev.status === 'Ongoing' ? '🔴 Ongoing' : ev.status || 'Upcoming'}
-                        </span>
-                        {ev.status === 'Ongoing' && ev.stageNumber && (
-                          <div style={{ marginTop: '0.3rem', color: '#fbbf24', fontWeight: 600, fontSize: '0.78rem' }}>
-                            Stage {ev.stageNumber}{ev.stageDescription ? ` — ${ev.stageDescription}` : ''}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {ev.status === 'Ongoing' && ev.stageNumber && (
+                        <div style={{ marginTop: '0.3rem', color: '#fbbf24', fontWeight: 600, fontSize: '0.78rem' }}>
+                          Stage {ev.stageNumber}{ev.stageDescription ? ` — ${ev.stageDescription}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="event-management-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          title={`Generate certificates for candidates in ${ev.name}`}
+                          onClick={() => {
+                            setCertificateLaunch({
+                              eventName: ev.name,
+                              candidateIds: candidates
+                                .filter(candidate => candidate.event === ev.name)
+                                .map(candidate => String(candidate._id || candidate.id || candidate.name)),
+                            });
+                            setActiveAdminTab('certificates');
+                          }}
+                        >
+                          📜 Generate Certificates
+                        </button>
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
@@ -1511,12 +1711,10 @@ export default function AdminPage() {
                         >
                           🗑️ Delete
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </div>
+                </div>
+              </details>
+            ))}
           </div>
         </div>
       )}
@@ -1530,7 +1728,7 @@ export default function AdminPage() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search candidates by name, chest no, event, sakha, mekhala..."
+                placeholder="Search candidates by name, chest no, event, parish, mekhala..."
                 value={candidateSearch}
                 onChange={(e) => setCandidateSearch(e.target.value)}
               />
@@ -1555,7 +1753,7 @@ export default function AdminPage() {
                     dob: '',
                     phone: '',
                     mekhala: mekhalas[0]?.name || '',
-                    sakha: '',
+                    parish: '',
                     section: 'Junior',
                     sex: 'Male',
                     event: initialValid[0]?.name || '',
@@ -1579,7 +1777,7 @@ export default function AdminPage() {
                   <th>DOB</th>
                   <th>Phone</th>
                   <th>Sex</th>
-                  <th>Sakha & Mekhala</th>
+                  <th>Parish & Mekhala</th>
                   <th>Section</th>
                   <th>Event</th>
                   <th>Pts</th>
@@ -1625,7 +1823,7 @@ export default function AdminPage() {
                       </td>
                       <td>{c.sex}</td>
                       <td>
-                        <div>{c.sakha}</div>
+                        <div>{c.parish}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.mekhala}</div>
                       </td>
                       <td>{c.section}</td>
@@ -1736,19 +1934,56 @@ export default function AdminPage() {
                   ) : (
                     filteredMekhalas.map(m => {
                       const count = candidates.filter(c => c.mekhala === m.name).length;
+                      const isEditing = editingMekhala?._id === m._id;
                       return (
                         <tr key={m._id || m.name}>
-                          <td><strong style={{ color: '#fff' }}>{m.name}</strong></td>
-                          <td>{m.code || '—'}</td>
+                          <td>
+                            {isEditing ? (
+                              <input
+                                className="form-input"
+                                aria-label="Mekhala name"
+                                value={editingMekhala.name}
+                                onChange={(e) => setEditingMekhala({ ...editingMekhala, name: e.target.value })}
+                              />
+                            ) : (
+                              <strong style={{ color: '#fff' }}>{m.name}</strong>
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <input
+                                className="form-input"
+                                aria-label="Mekhala short code"
+                                value={editingMekhala.code || ''}
+                                onChange={(e) => setEditingMekhala({ ...editingMekhala, code: e.target.value })}
+                              />
+                            ) : m.code || '—'}
+                          </td>
                           <td>{count}</td>
                           <td style={{ textAlign: 'right' }}>
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleDeleteMekhala(m._id, m.name)}
-                            >
-                              🗑️ Delete
-                            </button>
+                            {isEditing ? (
+                              <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveMekhalaEdit}>
+                                  💾 Save
+                                </button>
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingMekhala(null)}>
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingMekhala({ ...m })}>
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger btn-sm"
+                                  onClick={() => handleDeleteMekhala(m._id, m.name)}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1761,18 +1996,18 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* TAB 5: MANAGE SAKHAS */}
-      {activeAdminTab === 'sakha' && (
+      {/* TAB 5: MANAGE PARISHES */}
+      {activeAdminTab === 'parish' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) 1fr', gap: '2rem' }}>
           <div className="glass-panel" style={{ padding: '2rem' }}>
-            <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '1.25rem' }}>Add New Sakha</h3>
-            <form onSubmit={handleAddSakha}>
+            <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '1.25rem' }}>Add New Parish</h3>
+            <form onSubmit={handleAddParish}>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label className="form-label">Parent Mekhala *</label>
                 <select
                   className="form-select"
-                  value={newSakha.mekhala}
-                  onChange={(e) => setNewSakha({ ...newSakha, mekhala: e.target.value })}
+                  value={newParish.mekhala}
+                  onChange={(e) => setNewParish({ ...newParish, mekhala: e.target.value })}
                   required
                 >
                   <option value="">-- Choose Mekhala --</option>
@@ -1785,19 +2020,19 @@ export default function AdminPage() {
               </div>
 
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label className="form-label">Sakha Name *</label>
+                <label className="form-label">Parish Name *</label>
                 <input
                   type="text"
                   className="form-input"
                   placeholder="e.g. Kozhikode Town"
-                  value={newSakha.name}
-                  onChange={(e) => setNewSakha({ ...newSakha, name: e.target.value })}
+                  value={newParish.name}
+                  onChange={(e) => setNewParish({ ...newParish, name: e.target.value })}
                   required
                 />
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                ➕ Add Sakha
+                ➕ Add Parish
               </button>
             </form>
           </div>
@@ -1808,30 +2043,30 @@ export default function AdminPage() {
                 <span className="search-icon">🔍</span>
                 <input
                   type="text"
-                  placeholder="Search sakha by name or parent mekhala..."
+                  placeholder="Search parish by name or parent mekhala..."
                   className="form-input"
-                  value={sakhaSearch}
-                  onChange={(e) => setSakhaSearch(e.target.value)}
+                  value={parishSearch}
+                  onChange={(e) => setParishSearch(e.target.value)}
                 />
               </div>
               <select
                 className="form-select"
                 style={{ width: 'auto', minWidth: '180px' }}
-                value={sakhaMekhalaFilter}
-                onChange={(e) => setSakhaMekhalaFilter(e.target.value)}
+                value={parishMekhalaFilter}
+                onChange={(e) => setParishMekhalaFilter(e.target.value)}
               >
                 <option value="ALL">All Mekhalas</option>
                 {mekhalas.map(m => (
                   <option key={m._id || m.name} value={m.name}>{m.name}</option>
                 ))}
               </select>
-              {(sakhaSearch || sakhaMekhalaFilter !== 'ALL') && (
+              {(parishSearch || parishMekhalaFilter !== 'ALL') && (
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={() => {
-                    setSakhaSearch('');
-                    setSakhaMekhalaFilter('ALL');
+                    setParishSearch('');
+                    setParishMekhalaFilter('ALL');
                   }}
                 >
                   Clear
@@ -1843,44 +2078,85 @@ export default function AdminPage() {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>Sakha Name</th>
+                    <th>Parish Name</th>
                     <th>Parent Mekhala</th>
                     <th>Registered Candidates</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSakhas.length === 0 ? (
+                  {filteredParishes.length === 0 ? (
                     <tr>
                       <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        No sakhas match your search filters.
+                        No parishes match your search filters.
                       </td>
                     </tr>
                   ) : (
-                    filteredSakhas.map(s => {
-                      const count = candidates.filter(c => c.sakha === s.name).length;
+                    filteredParishes.map(s => {
+                      const count = candidates.filter(c => c.parish === s.name).length;
+                      const isEditing = editingParish?._id === s._id;
                       return (
                         <tr key={s._id || s.name}>
-                          <td><strong style={{ color: '#fff' }}>{s.name}</strong></td>
                           <td>
-                            <span style={{
-                              padding: '0.2rem 0.5rem',
-                              borderRadius: 'var(--radius-sm)',
-                              background: 'rgba(255, 255, 255, 0.05)',
-                              fontSize: '0.85rem'
-                            }}>
-                              {s.mekhala}
-                            </span>
+                            {isEditing ? (
+                              <input
+                                className="form-input"
+                                aria-label="Parish name"
+                                value={editingParish.name}
+                                onChange={(e) => setEditingParish({ ...editingParish, name: e.target.value })}
+                              />
+                            ) : (
+                              <strong style={{ color: '#fff' }}>{s.name}</strong>
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <select
+                                className="form-select"
+                                aria-label="Parent Mekhala"
+                                value={editingParish.mekhala}
+                                onChange={(e) => setEditingParish({ ...editingParish, mekhala: e.target.value })}
+                              >
+                                {mekhalas.map(mekhala => (
+                                  <option key={mekhala._id || mekhala.name} value={mekhala.name}>{mekhala.name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span style={{
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: 'var(--radius-sm)',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                fontSize: '0.85rem'
+                              }}>
+                                {s.mekhala}
+                              </span>
+                            )}
                           </td>
                           <td>{count}</td>
                           <td style={{ textAlign: 'right' }}>
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleDeleteSakha(s._id, s.name)}
-                            >
-                              🗑️ Delete
-                            </button>
+                            {isEditing ? (
+                              <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveParishEdit}>
+                                  💾 Save
+                                </button>
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingParish(null)}>
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingParish({ ...s })}>
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger btn-sm"
+                                  onClick={() => handleDeleteParish(s._id, s.name)}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1923,7 +2199,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* 2-Column Responsive Layout: Add Category & DOB Simulator */}
+          {/* Add category and DOB rule form */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
             {/* ADD CATEGORY FORM */}
             <div className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -1997,134 +2273,6 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* INTERACTIVE DOB SIMULATOR / TESTER */}
-            <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div>
-                <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span>🧪</span> Test Candidate DOB Simulator
-                </h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-                  Test how a candidate's Date of Birth will be mapped to a Section in real time based on your active rules.
-                </p>
-
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Enter or Pick Test Date of Birth</label>
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={testDob}
-                    onChange={(e) => setTestDob(e.target.value)}
-                    style={{ fontSize: '1.05rem', padding: '0.65rem 0.9rem' }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
-                    Quick Test Presets:
-                  </span>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                      onClick={() => {
-                        const d = new Date();
-                        d.setFullYear(d.getFullYear() - 7);
-                        setTestDob(d.toISOString().split('T')[0]);
-                      }}
-                    >
-                      👶 Age 7 (Sub-Junior)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                      onClick={() => {
-                        const d = new Date();
-                        d.setFullYear(d.getFullYear() - 11);
-                        setTestDob(d.toISOString().split('T')[0]);
-                      }}
-                    >
-                      👦 Age 11 (Junior)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                      onClick={() => {
-                        const d = new Date();
-                        d.setFullYear(d.getFullYear() - 14);
-                        setTestDob(d.toISOString().split('T')[0]);
-                      }}
-                    >
-                      🧑 Age 14 (Senior)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                      onClick={() => {
-                        const d = new Date();
-                        d.setFullYear(d.getFullYear() - 17);
-                        setTestDob(d.toISOString().split('T')[0]);
-                      }}
-                    >
-                      👨 Age 17 (Super Senior)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Calculation Result Preview Box */}
-                {testDob ? (
-                  <div style={{
-                    padding: '1.25rem',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(59, 130, 246, 0.08)',
-                    border: '1px solid rgba(59, 130, 246, 0.25)'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Calculated Age:</span>
-                      <strong style={{ fontSize: '1.2rem', color: '#60a5fa' }}>
-                        {calculateAge(testDob)} years old
-                      </strong>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Auto-Selected Section:</span>
-                      <span style={{
-                        padding: '0.35rem 0.85rem',
-                        borderRadius: '20px',
-                        background: 'rgba(16, 185, 129, 0.2)',
-                        border: '1px solid rgba(16, 185, 129, 0.4)',
-                        color: '#34d399',
-                        fontWeight: 'bold',
-                        fontSize: '1rem'
-                      }}>
-                        🎯 {getCategoryForDob(testDob, categories)}
-                      </span>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                      Candidate will automatically be enrolled in this section & eligible events.
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{
-                    padding: '1.25rem',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px dashed rgba(255, 255, 255, 0.1)',
-                    textAlign: 'center',
-                    color: 'var(--text-muted)',
-                    fontSize: '0.85rem'
-                  }}>
-                    Select or click a preset above to preview age calculation & auto-selected section.
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                ℹ️ Rules are evaluated by priority order. If DOB matches a category's age or date range, that section is picked instantly.
-              </div>
-            </div>
           </div>
 
           {/* EXISTING CATEGORIES TABLE */}
@@ -2262,7 +2410,10 @@ export default function AdminPage() {
                       style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
                       onClick={() => setEditingEvent(prev => ({
                         ...prev,
-                        categories: [...SECTION_OPTIONS],
+                        categories: Array.from(new Set([
+                          ...sectionOptions,
+                          ...(editingEvent.categories || []),
+                        ])),
                       }))}
                     >
                       Select All
@@ -2290,7 +2441,10 @@ export default function AdminPage() {
                   borderRadius: '10px',
                   border: (!editingEvent.categories || editingEvent.categories.length === 0) ? '1px dashed #ef4444' : '1px solid rgba(255, 255, 255, 0.1)',
                 }}>
-                  {SECTION_OPTIONS.map((sec) => {
+                  {Array.from(new Set([
+                    ...sectionOptions,
+                    ...(editingEvent.categories || []),
+                  ])).map((sec) => {
                     const isSelected = editingEvent.categories?.includes(sec);
                     return (
                       <label
@@ -2672,14 +2826,14 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Sakha *</label>
+                  <label className="form-label">Parish *</label>
                   <select
                     className="form-select"
-                    value={editingCandidate.sakha}
-                    onChange={(e) => setEditingCandidate({ ...editingCandidate, sakha: e.target.value })}
+                    value={editingCandidate.parish}
+                    onChange={(e) => setEditingCandidate({ ...editingCandidate, parish: e.target.value })}
                     required
                   >
-                    {sakhas.map(s => (
+                    {parishes.map(s => (
                       <option key={s._id || s.name} value={s.name}>{s.name} ({s.mekhala})</option>
                     ))}
                   </select>
@@ -2906,7 +3060,7 @@ export default function AdminPage() {
                   <select
                     className="form-select"
                     value={adminCandidateForm.mekhala}
-                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, mekhala: e.target.value, sakha: '' })}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, mekhala: e.target.value, parish: '' })}
                     required
                   >
                     <option value="">-- Select Mekhala --</option>
@@ -2917,15 +3071,15 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Sakha *</label>
+                  <label className="form-label">Parish *</label>
                   <select
                     className="form-select"
-                    value={adminCandidateForm.sakha}
-                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, sakha: e.target.value })}
+                    value={adminCandidateForm.parish}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, parish: e.target.value })}
                     required
                   >
-                    <option value="">-- Select Sakha --</option>
-                    {sakhas
+                    <option value="">-- Select Parish --</option>
+                    {parishes
                       .filter(s => !adminCandidateForm.mekhala || s.mekhala === adminCandidateForm.mekhala)
                       .map(s => (
                         <option key={s._id || s.name} value={s.name}>{s.name}</option>
@@ -3023,6 +3177,8 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+      </div>
+      </div>
 
       {/* Print Sheet Modal (for Stage Managers and Official Results) */}
       <PrintSheetModal

@@ -19,6 +19,10 @@ export function getEventCategories(event) {
   return [];
 }
 
+export function isGroupEvent(event) {
+  return getEventCategories(event).some(category => category.toLowerCase() === 'group');
+}
+
 /**
  * Formats event categories for clean UI display (e.g. "Junior, Senior")
  */

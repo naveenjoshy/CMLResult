@@ -21,13 +21,13 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
   const generateCaptionText = useCallback(() => {
     if (!event) return '';
     const firstNames = firstWinners.length > 0 
-      ? firstWinners.map(w => `${w.name} (${w.sakha || ''}${w.chestNo ? `, Chest #${w.chestNo}` : ''})`).join(', ')
+      ? firstWinners.map(w => `${w.name} (${w.parish || ''}${w.chestNo ? `, Chest #${w.chestNo}` : ''})`).join(', ')
       : 'Result Awaited';
     const secondNames = secondWinners.length > 0 
-      ? secondWinners.map(w => `${w.name} (${w.sakha || ''}${w.chestNo ? `, Chest #${w.chestNo}` : ''})`).join(', ')
+      ? secondWinners.map(w => `${w.name} (${w.parish || ''}${w.chestNo ? `, Chest #${w.chestNo}` : ''})`).join(', ')
       : 'Result Awaited';
     const thirdNames = thirdWinners.length > 0 
-      ? thirdWinners.map(w => `${w.name} (${w.sakha || ''}${w.chestNo ? `, Chest #${w.chestNo}` : ''})`).join(', ')
+      ? thirdWinners.map(w => `${w.name} (${w.parish || ''}${w.chestNo ? `, Chest #${w.chestNo}` : ''})`).join(', ')
       : 'Result Awaited';
 
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -327,11 +327,11 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
           ctx.fillStyle = '#38bdf8';
           ctx.fillText(chestStr, contentX + 10, rowY + 12);
 
-          // Sakha & Mekhala details
+          // Parish & Mekhala details
           ctx.fillStyle = '#cbd5e1';
           ctx.font = format === 'square' ? '600 16px "Plus Jakarta Sans", system-ui, sans-serif' : '600 18px "Plus Jakarta Sans", system-ui, sans-serif';
-          const sakhaMekhala = `${winner.sakha || ''} • ${winner.mekhala || ''}`;
-          ctx.fillText(sakhaMekhala, contentX, rowY + (format === 'square' ? 36 : 46));
+          const parishMekhala = `${winner.parish || ''} • ${winner.mekhala || ''}`;
+          ctx.fillText(parishMekhala, contentX, rowY + (format === 'square' ? 36 : 46));
 
           // Grade & Points on the right edge
           ctx.textAlign = 'right';

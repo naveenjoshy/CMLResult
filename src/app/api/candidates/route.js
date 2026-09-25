@@ -4,7 +4,7 @@ import Candidate from '@/models/Candidate';
 import Event from '@/models/Event';
 import { getMemoryStore } from '@/lib/memoryStore';
 import { isRegistrationOpen } from '@/app/api/registration-status/route';
-import { isEventAvailableForCandidate } from '@/lib/eventUtils';
+import { isEventAvailableForCandidate, isEventAvailableForGender, isGroupEvent } from '@/lib/eventUtils';
 
 // Helper to compute points from event rules
 function calculatePoints(event, position, grade) {
@@ -29,13 +29,18 @@ function calculatePoints(event, position, grade) {
   return points;
 }
 
+function isCandidateEligibleForEvent(event, section, sex) {
+  return (isGroupEvent(event) && isEventAvailableForGender(event, sex)) ||
+    isEventAvailableForCandidate(event, section, sex);
+}
+
 export async function GET(request) {
   try {
     try {
       const { searchParams } = new URL(request.url);
       const event = searchParams.get('event');
       const mekhala = searchParams.get('mekhala');
-      const sakha = searchParams.get('sakha');
+      const parish = searchParams.get('parish');
       const section = searchParams.get('section');
       const search = searchParams.get('search');
 
@@ -44,7 +49,7 @@ export async function GET(request) {
         const query = {};
         if (event) query.event = event;
         if (mekhala) query.mekhala = mekhala;
-        if (sakha) query.sakha = sakha;
+        if (parish) query.parish = parish;
         if (section) query.section = section;
         if (search) {
           query.$or = [
@@ -65,7 +70,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const event = searchParams.get('event');
     const mekhala = searchParams.get('mekhala');
-    const sakha = searchParams.get('sakha');
+    const parish = searchParams.get('parish');
     const section = searchParams.get('section');
     const search = searchParams.get('search');
 
@@ -74,7 +79,7 @@ export async function GET(request) {
 
     if (event) list = list.filter(c => c.event === event);
     if (mekhala) list = list.filter(c => c.mekhala === mekhala);
-    if (sakha) list = list.filter(c => c.sakha === sakha);
+    if (parish) list = list.filter(c => c.parish === parish);
     if (section) list = list.filter(c => c.section === section);
     if (search) {
       const q = search.toLowerCase();
@@ -96,7 +101,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, houseName, dob, phone, sakha, mekhala, section, sex, event, chestNo, isAdmin } = body;
+    const { name, houseName, dob, phone, parish, mekhala, section, sex, event, chestNo, isAdmin } = body;
 
     // Check registration deadline for non-admin requests
     if (!isAdmin) {
@@ -110,10 +115,10 @@ export async function POST(request) {
       }
     }
 
-    if (!name || !houseName || !dob || !sakha || !mekhala || !section || !sex || !event) {
+    if (!name || !houseName || !parish || !mekhala || !sex || !event) {
       return NextResponse.json({
         success: false,
-        message: 'All required fields (Name, House Name, DOB, Sakha, Mekhala, Section, Sex, Event) must be provided',
+        message: 'All required fields (Name, House Name, Parish, Mekhala, Sex, Event) must be provided',
       }, { status: 400 });
     }
 
@@ -127,18 +132,39 @@ export async function POST(request) {
 
     // Do NOT auto-issue chest number. Chest numbers are issued after registration is completed by the admin.
     const finalChestNo = chestNo ? chestNo.trim() : '';
+    const normalizedDob = String(dob || '').trim();
+    const normalizedEvent = event.trim();
 
     const conn = await connectToDatabase();
-    if (conn) {
-      // Find event to get points config if position/grade provided
-      const eventDoc = await Event.findOne({ name: event.trim() });
-      if (eventDoc && !isEventAvailableForCandidate(eventDoc, section.trim(), trimmedSex)) {
-        return NextResponse.json({
-          success: false,
-          message: `The event "${event}" is not available for a ${trimmedSex} candidate in section "${section}".`,
-        }, { status: 400 });
-      }
+    const store = conn ? null : getMemoryStore();
+    const eventDoc = conn
+      ? await Event.findOne({ name: normalizedEvent })
+      : store.events.find(candidateEvent => candidateEvent.name === normalizedEvent);
+    const groupEvent = isGroupEvent(eventDoc);
 
+    if (!normalizedDob && !groupEvent) {
+      return NextResponse.json({
+        success: false,
+        message: 'Date of Birth is required unless registering for a Group event.',
+      }, { status: 400 });
+    }
+
+    const candidateSection = !normalizedDob && groupEvent ? 'Group' : String(section || '').trim();
+    if (!candidateSection) {
+      return NextResponse.json({
+        success: false,
+        message: 'Section is required for this event.',
+      }, { status: 400 });
+    }
+
+    if (eventDoc && !isCandidateEligibleForEvent(eventDoc, candidateSection, trimmedSex)) {
+      return NextResponse.json({
+        success: false,
+        message: `The event "${event}" is not available for a ${trimmedSex} candidate in section "${candidateSection}".`,
+      }, { status: 400 });
+    }
+
+    if (conn) {
       const position = body.position || 'None';
       const grade = body.grade || 'None';
       const totalPoints = calculatePoints(eventDoc, position, grade);
@@ -147,13 +173,13 @@ export async function POST(request) {
         chestNo: finalChestNo,
         name: name.trim(),
         houseName: houseName.trim(),
-        dob: dob.trim(),
+        dob: normalizedDob,
         phone: (phone || '').trim(),
-        sakha: sakha.trim(),
+        parish: parish.trim(),
         mekhala: mekhala.trim(),
-        section: section.trim(),
+        section: candidateSection,
         sex: sex.trim(),
-        event: event.trim(),
+        event: normalizedEvent,
         position,
         grade,
         totalPoints,
@@ -162,14 +188,6 @@ export async function POST(request) {
       return NextResponse.json({ success: true, data: candidate, source: 'mongodb' }, { status: 201 });
     }
 
-    const store = getMemoryStore();
-    const eventDoc = store.events.find(e => e.name === event.trim());
-    if (eventDoc && !isEventAvailableForCandidate(eventDoc, section.trim(), trimmedSex)) {
-      return NextResponse.json({
-        success: false,
-        message: `The event "${event}" is not available for a ${trimmedSex} candidate in section "${section}".`,
-      }, { status: 400 });
-    }
     const position = body.position || 'None';
     const grade = body.grade || 'None';
     const totalPoints = calculatePoints(eventDoc, position, grade);
@@ -179,13 +197,13 @@ export async function POST(request) {
       chestNo: finalChestNo,
       name: name.trim(),
       houseName: houseName.trim(),
-      dob: dob.trim(),
+      dob: normalizedDob,
       phone: (phone || '').trim(),
-      sakha: sakha.trim(),
+      parish: parish.trim(),
       mekhala: mekhala.trim(),
-      section: section.trim(),
+      section: candidateSection,
       sex: sex.trim(),
-      event: event.trim(),
+      event: normalizedEvent,
       position,
       grade,
       totalPoints,
@@ -230,7 +248,7 @@ export async function PUT(request) {
       const targetGrade = fields.grade !== undefined ? fields.grade : candidate.grade;
 
       const eventDoc = await Event.findOne({ name: targetEventName });
-      if ((fields.event || fields.section || fields.sex) && eventDoc && !isEventAvailableForCandidate(eventDoc, targetSection, targetSex)) {
+      if ((fields.event || fields.section || fields.sex) && eventDoc && !isCandidateEligibleForEvent(eventDoc, targetSection, targetSex)) {
         return NextResponse.json({
           success: false,
           message: `The event "${targetEventName}" is not available for a ${targetSex} candidate in section "${targetSection}".`,
@@ -262,7 +280,7 @@ export async function PUT(request) {
     const targetGrade = fields.grade !== undefined ? fields.grade : current.grade;
 
     const eventDoc = store.events.find(e => e.name === targetEventName);
-    if ((fields.event || fields.section || fields.sex) && eventDoc && !isEventAvailableForCandidate(eventDoc, targetSection, targetSex)) {
+    if ((fields.event || fields.section || fields.sex) && eventDoc && !isCandidateEligibleForEvent(eventDoc, targetSection, targetSex)) {
       return NextResponse.json({
         success: false,
         message: `The event "${targetEventName}" is not available for a ${targetSex} candidate in section "${targetSection}".`,

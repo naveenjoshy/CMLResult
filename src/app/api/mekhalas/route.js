@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Mekhala from '@/models/Mekhala';
+import Parish from '@/models/Parish';
+import Candidate from '@/models/Candidate';
 import { getMemoryStore } from '@/lib/memoryStore';
 
 export async function GET() {
@@ -58,6 +60,81 @@ export async function POST(request) {
     store.mekhalas.push(newMekhala);
 
     return NextResponse.json({ success: true, data: newMekhala, source: 'memory' }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(request) {
+  try {
+    const body = await request.json();
+    const { id, name, code } = body;
+    const trimmedName = String(name || '').trim();
+    const trimmedCode = String(code || '').trim();
+
+    if (!id || !trimmedName) {
+      return NextResponse.json({ success: false, message: 'Mekhala ID and name are required' }, { status: 400 });
+    }
+
+    const conn = await connectToDatabase();
+    if (conn) {
+      const current = await Mekhala.findById(id);
+      if (!current) {
+        return NextResponse.json({ success: false, message: 'Mekhala not found' }, { status: 404 });
+      }
+
+      const duplicate = await Mekhala.findOne({
+        name: { $regex: new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        _id: { $ne: id },
+      });
+      if (duplicate) {
+        return NextResponse.json({ success: false, message: `Mekhala "${trimmedName}" already exists` }, { status: 409 });
+      }
+
+      const previousName = current.name;
+      const updated = await Mekhala.findByIdAndUpdate(
+        id,
+        { name: trimmedName, code: trimmedCode },
+        { new: true, runValidators: true }
+      );
+
+      if (previousName !== trimmedName) {
+        await Promise.all([
+          Parish.updateMany({ mekhala: previousName }, { $set: { mekhala: trimmedName } }),
+          Candidate.updateMany({ mekhala: previousName }, { $set: { mekhala: trimmedName } }),
+        ]);
+      }
+
+      return NextResponse.json({ success: true, data: updated, source: 'mongodb' });
+    }
+
+    const store = getMemoryStore();
+    const index = store.mekhalas.findIndex(mekhala => String(mekhala._id) === String(id));
+    if (index < 0) {
+      return NextResponse.json({ success: false, message: 'Mekhala not found' }, { status: 404 });
+    }
+
+    const duplicate = store.mekhalas.some(mekhala =>
+      String(mekhala._id) !== String(id) && mekhala.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (duplicate) {
+      return NextResponse.json({ success: false, message: `Mekhala "${trimmedName}" already exists` }, { status: 409 });
+    }
+
+    const previousName = store.mekhalas[index].name;
+    store.mekhalas[index] = { ...store.mekhalas[index], name: trimmedName, code: trimmedCode };
+    if (previousName !== trimmedName) {
+      store.parishes = store.parishes.map(parish => parish.mekhala === previousName
+        ? { ...parish, mekhala: trimmedName }
+        : parish
+      );
+      store.candidates = store.candidates.map(candidate => candidate.mekhala === previousName
+        ? { ...candidate, mekhala: trimmedName }
+        : candidate
+      );
+    }
+
+    return NextResponse.json({ success: true, data: store.mekhalas[index], source: 'memory' });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

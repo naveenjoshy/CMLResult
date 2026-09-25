@@ -17,15 +17,15 @@ const CandidateSchema = new mongoose.Schema({
   },
   dob: {
     type: String,
-    required: [true, 'Date of birth is required'],
+    default: '',
   },
   phone: {
     type: String,
     trim: true,
   },
-  sakha: {
+  parish: {
     type: String,
-    required: [true, 'Sakha is required'],
+    required: [true, 'Parish is required'],
     trim: true,
   },
   mekhala: {

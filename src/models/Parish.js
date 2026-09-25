@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
-const SakhaSchema = new mongoose.Schema({
+const ParishSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'Please provide a Sakha name'],
+    required: [true, 'Please provide a Parish name'],
     unique: true,
     trim: true,
   },
@@ -18,4 +18,4 @@ const SakhaSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.models.Sakha || mongoose.model('Sakha', SakhaSchema);
+export default mongoose.models.Parish || mongoose.model('Parish', ParishSchema);

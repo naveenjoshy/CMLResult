@@ -6,13 +6,13 @@ import { getEventCategories } from '@/lib/eventUtils';
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('events'); // 'events', 'mekhala', 'sakha', 'search'
+  const [activeTab, setActiveTab] = useState('events'); // 'events', 'mekhala', 'parish', 'search'
   const [selectedEventFilter, setSelectedEventFilter] = useState('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [mekhalaSearch, setMekhalaSearch] = useState('');
-  const [sakhaSearch, setSakhaSearch] = useState('');
-  const [sakhaMekhalaFilter, setSakhaMekhalaFilter] = useState('ALL');
+  const [parishSearch, setParishSearch] = useState('');
+  const [parishMekhalaFilter, setParishMekhalaFilter] = useState('ALL');
   const [refreshing, setRefreshing] = useState(false);
 
   async function loadResults() {
@@ -49,7 +49,8 @@ export default function DashboardPage() {
     );
   }
 
-  const { events = [], topMekhalas = [], topSakhas = [], stats = {} } = data || {};
+  const { events = [], topMekhalas = [], topParishes = [], stats = {} } = data || {};
+  const hasPublishedResults = Boolean(stats.hasPublishedResults);
 
   // Filter events
   const filteredEvents = events.filter(ev => {
@@ -69,15 +70,15 @@ export default function DashboardPage() {
     return m.name.toLowerCase().includes(q) || (m.code && m.code.toLowerCase().includes(q));
   });
 
-  // Unique Mekhalas for Sakha filter
-  const uniqueMekhalas = Array.from(new Set(topSakhas.map(s => s.mekhala).filter(Boolean)));
+  // Unique Mekhalas for Parish filter
+  const uniqueMekhalas = Array.from(new Set(topParishes.map(s => s.mekhala).filter(Boolean)));
 
-  // Filter Sakhas
-  const filteredTopSakhas = topSakhas.filter(s => {
-    const matchesMekhala = sakhaMekhalaFilter === 'ALL' || s.mekhala === sakhaMekhalaFilter;
+  // Filter Parishes
+  const filteredTopParishes = topParishes.filter(s => {
+    const matchesMekhala = parishMekhalaFilter === 'ALL' || s.mekhala === parishMekhalaFilter;
     if (!matchesMekhala) return false;
-    if (!sakhaSearch.trim()) return true;
-    const q = sakhaSearch.toLowerCase();
+    if (!parishSearch.trim()) return true;
+    const q = parishSearch.toLowerCase();
     return s.name.toLowerCase().includes(q) || (s.mekhala && s.mekhala.toLowerCase().includes(q));
   });
 
@@ -94,7 +95,7 @@ export default function DashboardPage() {
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.chestNo && c.chestNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (c.houseName && c.houseName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        c.sakha?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.parish?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.mekhala?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : [];
@@ -107,9 +108,6 @@ export default function DashboardPage() {
           <span>🏆</span> Live Festival Results
         </div>
         <h1 className="hero-title">Festival Results & Leaderboard</h1>
-        <p className="hero-subtitle">
-          Real-time scores, event winners, and overall championship standings for Mekhalas and Sakhas.
-        </p>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '2rem' }}>
           <button 
@@ -118,7 +116,7 @@ export default function DashboardPage() {
             className="btn btn-secondary btn-sm"
             disabled={refreshing}
           >
-            {refreshing ? '🔄 Refreshing...' : '🔄 Refresh Live Data'}
+            {refreshing ? '🔄 Refreshing...' : '🔄 Refresh Result'}
           </button>
         </div>
       </div>
@@ -153,12 +151,12 @@ export default function DashboardPage() {
         </div>
 
         <div className="glass-panel stat-card emerald">
-          <span className="stat-label">Leading Sakha</span>
+          <span className="stat-label">Leading Parish</span>
           <span className="stat-value" style={{ color: '#34d399' }}>
-            {stats.leadingSakha ? stats.leadingSakha.name : '—'}
+            {stats.leadingParish ? stats.leadingParish.name : '—'}
           </span>
           <span className="stat-sub">
-            {stats.leadingSakha ? `${stats.leadingSakha.totalPoints} Total Points` : 'Awaiting results'}
+            {stats.leadingParish ? `${stats.leadingParish.totalPoints} Total Points` : 'Awaiting results'}
           </span>
         </div>
       </div>
@@ -283,10 +281,10 @@ export default function DashboardPage() {
         </button>
         <button 
           type="button"
-          className={`tab-btn ${activeTab === 'sakha' ? 'active' : ''}`}
-          onClick={() => setActiveTab('sakha')}
+          className={`tab-btn ${activeTab === 'parish' ? 'active' : ''}`}
+          onClick={() => setActiveTab('parish')}
         >
-          🏢 Top Sakha Leaderboard
+          🏢 Top Parish Leaderboard
         </button>
         <button 
           type="button"
@@ -409,7 +407,7 @@ export default function DashboardPage() {
                                     {cand.name} <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>({cand.chestNo})</span>
                                   </div>
                                   <div className="winner-sub">
-                                    {cand.sakha} • {cand.mekhala}
+                                    {cand.parish} • {cand.mekhala}
                                   </div>
                                 </div>
                               </div>
@@ -434,7 +432,7 @@ export default function DashboardPage() {
                                     {cand.name} <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>({cand.chestNo})</span>
                                   </div>
                                   <div className="winner-sub">
-                                    {cand.sakha} • {cand.mekhala}
+                                    {cand.parish} • {cand.mekhala}
                                   </div>
                                 </div>
                               </div>
@@ -459,7 +457,7 @@ export default function DashboardPage() {
                                     {cand.name} <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>({cand.chestNo})</span>
                                   </div>
                                   <div className="winner-sub">
-                                    {cand.sakha} • {cand.mekhala}
+                                    {cand.parish} • {cand.mekhala}
                                   </div>
                                 </div>
                               </div>
@@ -499,7 +497,7 @@ export default function DashboardPage() {
       {activeTab === 'mekhala' && (
         <div>
           {/* Podium Top 3 */}
-          {topMekhalas.length >= 2 && (
+          {hasPublishedResults && topMekhalas.length >= 2 && (
             <div className="podium-container">
               {/* 2nd Place */}
               {topMekhalas[1] && (
@@ -593,7 +591,13 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTopMekhalas.length === 0 ? (
+                {!hasPublishedResults ? (
+                  <tr>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      Mekhala standings will appear after results are published.
+                    </td>
+                  </tr>
+                ) : filteredTopMekhalas.length === 0 ? (
                   <tr>
                     <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                       No mekhalas match your search "{mekhalaSearch}".
@@ -641,61 +645,61 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* TAB 3: TOP SAKHA LEADERBOARD */}
-      {activeTab === 'sakha' && (
+      {/* TAB 3: TOP PARISH LEADERBOARD */}
+      {activeTab === 'parish' && (
         <div>
           {/* Podium Top 3 */}
-          {topSakhas.length >= 2 && (
+          {hasPublishedResults && topParishes.length >= 2 && (
             <div className="podium-container">
               {/* 2nd Place */}
-              {topSakhas[1] && (
+              {topParishes[1] && (
                 <div className="podium-step second">
                   <div className="podium-badge">🥈</div>
                   <div className="podium-card">
                     <div style={{ fontSize: '0.8rem', color: 'var(--silver)', fontWeight: 600 }}>RUNNER-UP</div>
-                    <div className="podium-name">{topSakhas[1].name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topSakhas[1].mekhala}</div>
-                    <div className="podium-points">{topSakhas[1].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
+                    <div className="podium-name">{topParishes[1].name}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topParishes[1].mekhala}</div>
+                    <div className="podium-points">{topParishes[1].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
                     <div className="podium-meta">
-                      <span>🥇 {topSakhas[1].firsts}</span>
-                      <span>🥈 {topSakhas[1].seconds}</span>
-                      <span>🥉 {topSakhas[1].thirds}</span>
+                      <span>🥇 {topParishes[1].firsts}</span>
+                      <span>🥈 {topParishes[1].seconds}</span>
+                      <span>🥉 {topParishes[1].thirds}</span>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* 1st Place */}
-              {topSakhas[0] && (
+              {topParishes[0] && (
                 <div className="podium-step first">
                   <div className="podium-badge">👑</div>
                   <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gold)', fontWeight: 700 }}>CHAMPION SAKHA</div>
-                    <div className="podium-name" style={{ fontSize: '1.4rem' }}>{topSakhas[0].name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topSakhas[0].mekhala}</div>
-                    <div className="podium-points" style={{ color: '#fbbf24' }}>{topSakhas[0].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gold)', fontWeight: 700 }}>CHAMPION PARISH</div>
+                    <div className="podium-name" style={{ fontSize: '1.4rem' }}>{topParishes[0].name}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topParishes[0].mekhala}</div>
+                    <div className="podium-points" style={{ color: '#fbbf24' }}>{topParishes[0].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
                     <div className="podium-meta">
-                      <span>🥇 {topSakhas[0].firsts}</span>
-                      <span>🥈 {topSakhas[0].seconds}</span>
-                      <span>🥉 {topSakhas[0].thirds}</span>
+                      <span>🥇 {topParishes[0].firsts}</span>
+                      <span>🥈 {topParishes[0].seconds}</span>
+                      <span>🥉 {topParishes[0].thirds}</span>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* 3rd Place */}
-              {topSakhas[2] && (
+              {topParishes[2] && (
                 <div className="podium-step third">
                   <div className="podium-badge">🥉</div>
                   <div className="podium-card">
                     <div style={{ fontSize: '0.8rem', color: 'var(--bronze)', fontWeight: 600 }}>THIRD PLACE</div>
-                    <div className="podium-name">{topSakhas[2].name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topSakhas[2].mekhala}</div>
-                    <div className="podium-points">{topSakhas[2].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
+                    <div className="podium-name">{topParishes[2].name}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topParishes[2].mekhala}</div>
+                    <div className="podium-points">{topParishes[2].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
                     <div className="podium-meta">
-                      <span>🥇 {topSakhas[2].firsts}</span>
-                      <span>🥈 {topSakhas[2].seconds}</span>
-                      <span>🥉 {topSakhas[2].thirds}</span>
+                      <span>🥇 {topParishes[2].firsts}</span>
+                      <span>🥈 {topParishes[2].seconds}</span>
+                      <span>🥉 {topParishes[2].thirds}</span>
                     </div>
                   </div>
                 </div>
@@ -703,36 +707,36 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Sakha Search & Filter Bar */}
+          {/* Parish Search & Filter Bar */}
           <div className="filter-bar" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <div className="search-box" style={{ flex: 1, minWidth: '220px' }}>
               <span className="search-icon">🔍</span>
               <input
                 type="text"
-                placeholder="Search sakha by name or parent mekhala..."
+                placeholder="Search parish by name or parent mekhala..."
                 className="form-input"
-                value={sakhaSearch}
-                onChange={(e) => setSakhaSearch(e.target.value)}
+                value={parishSearch}
+                onChange={(e) => setParishSearch(e.target.value)}
               />
             </div>
             <select
               className="form-select"
               style={{ width: 'auto', minWidth: '180px' }}
-              value={sakhaMekhalaFilter}
-              onChange={(e) => setSakhaMekhalaFilter(e.target.value)}
+              value={parishMekhalaFilter}
+              onChange={(e) => setParishMekhalaFilter(e.target.value)}
             >
               <option value="ALL">All Mekhalas</option>
               {uniqueMekhalas.map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-            {(sakhaSearch || sakhaMekhalaFilter !== 'ALL') && (
+            {(parishSearch || parishMekhalaFilter !== 'ALL') && (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
-                  setSakhaSearch('');
-                  setSakhaMekhalaFilter('ALL');
+                  setParishSearch('');
+                  setParishMekhalaFilter('ALL');
                 }}
               >
                 Clear
@@ -740,13 +744,13 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Full Sakha Table */}
+          {/* Full Parish Table */}
           <div className="table-wrapper">
             <table className="custom-table">
               <thead>
                 <tr>
                   <th style={{ width: '80px' }}>Rank</th>
-                  <th>Sakha Name</th>
+                  <th>Parish Name</th>
                   <th>Parent Mekhala</th>
                   <th>Candidates</th>
                   <th>🥇 1st</th>
@@ -757,14 +761,20 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTopSakhas.length === 0 ? (
+                {!hasPublishedResults ? (
                   <tr>
                     <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                      No sakhas match your search filters.
+                      Parish standings will appear after results are published.
+                    </td>
+                  </tr>
+                ) : filteredTopParishes.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      No parishes match your search filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredTopSakhas.map(s => (
+                  filteredTopParishes.map(s => (
                     <tr key={s.name}>
                       <td>
                         <span className={`rank-pill ${
@@ -879,7 +889,7 @@ export default function DashboardPage() {
                   }}>
                     <div>🎪 <strong>Event:</strong> {cand.event}</div>
                     <div>📍 <strong>Mekhala:</strong> {cand.mekhala}</div>
-                    <div>🏢 <strong>Sakha:</strong> {cand.sakha}</div>
+                    <div>🏢 <strong>Parish:</strong> {cand.parish}</div>
                     <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.35rem' }}>
                       <span>🏆 Position: <strong style={{ color: '#fff' }}>{cand.position || 'None'}</strong></span>
                       <span>⭐ Grade: <strong style={{ color: '#fbbf24' }}>{cand.grade || 'None'}</strong></span>

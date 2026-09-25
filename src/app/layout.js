@@ -4,7 +4,7 @@ import Footer from '@/components/Footer';
 
 export const metadata = {
   title: 'CML Result Portal - Live Fest Results & Management',
-  description: 'Live event results, candidate registration, and real-time Sakha & Mekhala points leaderboards.',
+  description: 'Live event results, candidate registration, and real-time Parish & Mekhala points leaderboards.',
 };
 
 export default function RootLayout({ children }) {

@@ -210,7 +210,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       <th style={{ width: '50px', textAlign: 'center' }}>Serial No.</th>
                       <th style={{ width: '100px', textAlign: 'center' }}>Chest Number</th>
                       <th style={{ width: '220px' }}>Name</th>
-                      <th style={{ width: '170px' }}>Sakha / Mekhala</th>
+                      <th style={{ width: '170px' }}>Parish / Mekhala</th>
                       <th>Remarks</th>
                     </tr>
                   </thead>
@@ -237,7 +237,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                             )}
                           </td>
                           <td>
-                            <div style={{ fontWeight: 600, color: '#374151' }}>{c.sakha}</div>
+                            <div style={{ fontWeight: 600, color: '#374151' }}>{c.parish}</div>
                             <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{c.mekhala}</div>
                           </td>
                           <td style={{ minHeight: '36px' }}>
@@ -294,7 +294,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       {firstPlace.length > 0 ? firstPlace.map(w => (
                         <div key={w._id} style={{ marginTop: '0.25rem' }}>
                           <strong style={{ fontSize: '0.95rem', color: '#111827', display: 'block' }}>{w.name}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#78350f' }}>Chest: {w.chestNo} • {w.sakha}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#78350f' }}>Chest: {w.chestNo} • {w.parish}</span>
                         </div>
                       )) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>None</span>}
                     </div>
@@ -311,7 +311,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       {secondPlace.length > 0 ? secondPlace.map(w => (
                         <div key={w._id} style={{ marginTop: '0.25rem' }}>
                           <strong style={{ fontSize: '0.95rem', color: '#111827', display: 'block' }}>{w.name}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#334155' }}>Chest: {w.chestNo} • {w.sakha}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#334155' }}>Chest: {w.chestNo} • {w.parish}</span>
                         </div>
                       )) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>None</span>}
                     </div>
@@ -328,7 +328,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       {thirdPlace.length > 0 ? thirdPlace.map(w => (
                         <div key={w._id} style={{ marginTop: '0.25rem' }}>
                           <strong style={{ fontSize: '0.95rem', color: '#111827', display: 'block' }}>{w.name}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#9a3412' }}>Chest: {w.chestNo} • {w.sakha}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#9a3412' }}>Chest: {w.chestNo} • {w.parish}</span>
                         </div>
                       )) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>None</span>}
                     </div>
@@ -343,7 +343,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       <th style={{ width: '90px', textAlign: 'center' }}>Position</th>
                       <th style={{ width: '85px', textAlign: 'center' }}>Chest No</th>
                       <th>Candidate Name</th>
-                      <th>Sakha</th>
+                      <th>Parish</th>
                       <th>Mekhala</th>
                       <th style={{ width: '60px', textAlign: 'center' }}>Grade</th>
                       <th style={{ width: '70px', textAlign: 'right' }}>Points</th>
@@ -382,7 +382,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                               <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{c.houseName}</div>
                             )}
                           </td>
-                          <td>{c.sakha}</td>
+                          <td>{c.parish}</td>
                           <td>{c.mekhala}</td>
                           <td style={{ textAlign: 'center', fontWeight: 700 }}>
                             {c.grade && c.grade !== 'None' ? c.grade : '—'}

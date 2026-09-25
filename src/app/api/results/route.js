@@ -3,10 +3,10 @@ import { connectToDatabase } from '@/lib/db';
 import Event from '@/models/Event';
 import Candidate from '@/models/Candidate';
 import Mekhala from '@/models/Mekhala';
-import Sakha from '@/models/Sakha';
+import Parish from '@/models/Parish';
 import { getMemoryStore } from '@/lib/memoryStore';
 
-function aggregateResults(events, candidates, mekhalas, sakhas) {
+function aggregateResults(events, candidates, mekhalas, parishes) {
   // Mekhala points map
   const mekhalaMap = {};
   mekhalas.forEach(m => {
@@ -24,10 +24,10 @@ function aggregateResults(events, candidates, mekhalas, sakhas) {
     };
   });
 
-  // Sakha points map
-  const sakhaMap = {};
-  sakhas.forEach(s => {
-    sakhaMap[s.name] = {
+  // Parish points map
+  const parishMap = {};
+  parishes.forEach(s => {
+    parishMap[s.name] = {
       name: s.name,
       mekhala: s.mekhala,
       totalPoints: 0,
@@ -83,11 +83,11 @@ function aggregateResults(events, candidates, mekhalas, sakhas) {
       if (cand.grade === 'C') mekhalaMap[cand.mekhala].gradeC += 1;
     }
 
-    // Tally candidate to Sakha
-    if (cand.sakha) {
-      if (!sakhaMap[cand.sakha]) {
-        sakhaMap[cand.sakha] = {
-          name: cand.sakha,
+    // Tally candidate to Parish
+    if (cand.parish) {
+      if (!parishMap[cand.parish]) {
+        parishMap[cand.parish] = {
+          name: cand.parish,
           mekhala: cand.mekhala || '',
           totalPoints: 0,
           firsts: 0,
@@ -99,14 +99,14 @@ function aggregateResults(events, candidates, mekhalas, sakhas) {
           candidateCount: 0,
         };
       }
-      sakhaMap[cand.sakha].candidateCount += 1;
-      sakhaMap[cand.sakha].totalPoints += cand.totalPoints || 0;
-      if (cand.position === 'First') sakhaMap[cand.sakha].firsts += 1;
-      if (cand.position === 'Second') sakhaMap[cand.sakha].seconds += 1;
-      if (cand.position === 'Third') sakhaMap[cand.sakha].thirds += 1;
-      if (cand.grade === 'A') sakhaMap[cand.sakha].gradeA += 1;
-      if (cand.grade === 'B') sakhaMap[cand.sakha].gradeB += 1;
-      if (cand.grade === 'C') sakhaMap[cand.sakha].gradeC += 1;
+      parishMap[cand.parish].candidateCount += 1;
+      parishMap[cand.parish].totalPoints += cand.totalPoints || 0;
+      if (cand.position === 'First') parishMap[cand.parish].firsts += 1;
+      if (cand.position === 'Second') parishMap[cand.parish].seconds += 1;
+      if (cand.position === 'Third') parishMap[cand.parish].thirds += 1;
+      if (cand.grade === 'A') parishMap[cand.parish].gradeA += 1;
+      if (cand.grade === 'B') parishMap[cand.parish].gradeB += 1;
+      if (cand.grade === 'C') parishMap[cand.parish].gradeC += 1;
     }
 
     // Attach to event
@@ -118,6 +118,12 @@ function aggregateResults(events, candidates, mekhalas, sakhas) {
     }
   });
 
+  const hasPublishedResults = candidates.some(cand =>
+    (cand.position && cand.position !== 'None') ||
+    (cand.grade && cand.grade !== 'None') ||
+    Number(cand.totalPoints || 0) > 0
+  );
+
   // Sort leaderboards
   const topMekhalas = Object.values(mekhalaMap).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
@@ -125,7 +131,7 @@ function aggregateResults(events, candidates, mekhalas, sakhas) {
     return b.seconds - a.seconds;
   }).map((item, idx) => ({ ...item, rank: idx + 1 }));
 
-  const topSakhas = Object.values(sakhaMap).sort((a, b) => {
+  const topParishes = Object.values(parishMap).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
     if (b.firsts !== a.firsts) return b.firsts - a.firsts;
     return b.seconds - a.seconds;
@@ -137,13 +143,14 @@ function aggregateResults(events, candidates, mekhalas, sakhas) {
   return {
     events: eventsList,
     topMekhalas,
-    topSakhas,
+    topParishes,
     stats: {
       totalCandidates: candidates.length,
       totalEvents: events.length,
       completedEvents: events.filter(e => e.status === 'Completed').length,
-      leadingMekhala: topMekhalas[0] || null,
-      leadingSakha: topSakhas[0] || null,
+      hasPublishedResults,
+      leadingMekhala: hasPublishedResults ? topMekhalas[0] || null : null,
+      leadingParish: hasPublishedResults ? topParishes[0] || null : null,
     },
   };
 }
@@ -152,14 +159,14 @@ export async function GET() {
   try {
     const conn = await connectToDatabase();
     if (conn) {
-      const [events, candidates, mekhalas, sakhas] = await Promise.all([
+      const [events, candidates, mekhalas, parishes] = await Promise.all([
         Event.find({}).lean(),
         Candidate.find({}).lean(),
         Mekhala.find({}).lean(),
-        Sakha.find({}).lean(),
+        Parish.find({}).lean(),
       ]);
 
-      const result = aggregateResults(events, candidates, mekhalas, sakhas);
+      const result = aggregateResults(events, candidates, mekhalas, parishes);
       return NextResponse.json({ success: true, data: result, source: 'mongodb' });
     }
   } catch (err) {
@@ -167,6 +174,6 @@ export async function GET() {
   }
 
   const store = getMemoryStore();
-  const result = aggregateResults(store.events, store.candidates, store.mekhalas, store.sakhas);
+  const result = aggregateResults(store.events, store.candidates, store.mekhalas, store.parishes);
   return NextResponse.json({ success: true, data: result, source: 'memory' });
 }

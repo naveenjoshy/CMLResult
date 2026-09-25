@@ -2,13 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import {
-  isEventAvailableForCandidate,
+  getEventCategories,
+  isGroupEvent,
+  isEventAvailableForGender,
+  isEventAvailableForSection,
   formatEventCategories,
   formatEventGender,
   calculateAge,
   getCategoryForDob,
   DEFAULT_CATEGORY_RULES,
 } from '@/lib/eventUtils';
+
+function isRegistrationEventAvailable(event, section, sex) {
+  const groupEvent = isGroupEvent(event);
+  const matchesSection = Boolean(section) && isEventAvailableForSection(event, section);
+  return isEventAvailableForGender(event, sex) && (groupEvent || matchesSection);
+}
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -17,29 +26,30 @@ export default function RegisterPage() {
     dob: '',
     phone: '',
     mekhala: '',
-    sakha: '',
-    section: 'Junior',
+    parish: '',
+    section: '',
     sex: 'Male',
     event: '',
   });
 
   const [mekhalas, setMekhalas] = useState([]);
-  const [sakhas, setSakhas] = useState([]);
+  const [parishes, setParishes] = useState([]);
   const [events, setEvents] = useState([]);
   const [categoryRules, setCategoryRules] = useState(DEFAULT_CATEGORY_RULES);
+  const [categoryRulesLoaded, setCategoryRulesLoaded] = useState(false);
   const [regStatus, setRegStatus] = useState({ isOpen: true, endDate: null, endDateFormatted: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
   const [statusMessage, setStatusMessage] = useState(null);
   const [registeredCandidate, setRegisteredCandidate] = useState(null);
 
-  // Fetch Mekhalas, Sakhas, Events, Categories, and Registration Status
+  // Fetch Mekhalas, Parishes, Events, Categories, and Registration Status
   useEffect(() => {
     async function loadInitialData() {
       try {
         const [resM, resS, resE, resReg, resCat] = await Promise.all([
           fetch('/api/mekhalas'),
-          fetch('/api/sakhas'),
+          fetch('/api/parishes'),
           fetch('/api/events'),
           fetch('/api/registration-status'),
           fetch('/api/categories'),
@@ -52,18 +62,14 @@ export default function RegisterPage() {
         const dataCat = await resCat.json();
 
         if (dataM.success) setMekhalas(dataM.data || []);
-        if (dataS.success) setSakhas(dataS.data || []);
+        if (dataS.success) setParishes(dataS.data || []);
         if (dataReg.success) setRegStatus(dataReg);
-        if (dataCat.success && dataCat.data?.length > 0) {
-          setCategoryRules(dataCat.data);
+        if (dataCat.success) {
+          setCategoryRules(dataCat.data?.length > 0 ? dataCat.data : DEFAULT_CATEGORY_RULES);
+          setCategoryRulesLoaded(true);
         }
         if (dataE.success) {
-          const evList = dataE.data || [];
-          setEvents(evList);
-          const validInitial = evList.filter(ev => isEventAvailableForCandidate(ev, 'Junior', 'Male'));
-          if (validInitial.length > 0) {
-            setFormData(prev => ({ ...prev, event: validInitial[0].name }));
-          }
+          setEvents(dataE.data || []);
         }
       } catch (err) {
         console.error('Error loading dropdown data:', err);
@@ -74,42 +80,88 @@ export default function RegisterPage() {
     loadInitialData();
   }, []);
 
-  // Filter Sakhas based on selected Mekhala
-  const availableSakhas = formData.mekhala
-    ? sakhas.filter(s => s.mekhala.toLowerCase() === formData.mekhala.toLowerCase())
-    : sakhas;
+  useEffect(() => {
+    if (!categoryRulesLoaded) return;
 
-  // Filter Events based on selected Section and Sex
-  const availableEvents = events.filter(ev => isEventAvailableForCandidate(ev, formData.section, formData.sex));
+    setFormData(prev => {
+      const selectedEvent = events.find(event => event.name === prev.event);
+      const section = prev.dob
+        ? getCategoryForDob(prev.dob, categoryRules)
+        : (isGroupEvent(selectedEvent) ? 'Group' : '');
+      const validEvents = events.filter(event => isRegistrationEventAvailable(event, section, prev.sex));
+      const event = validEvents.some(candidateEvent => candidateEvent.name === prev.event)
+        ? prev.event
+        : '';
+
+      if (prev.section === section && prev.event === event) return prev;
+      return { ...prev, section, event };
+    });
+  }, [categoryRulesLoaded, categoryRules, events]);
+
+  // Filter Parishes based on selected Mekhala
+  const availableParishes = formData.mekhala
+    ? parishes.filter(s => s.mekhala.toLowerCase() === formData.mekhala.toLowerCase())
+    : parishes;
+
+  // Until DOB resolves to a section, only Group events are available.
+  const availableEvents = events.filter(ev =>
+    isRegistrationEventAvailable(ev, formData.section, formData.sex)
+  );
+  const hasResolvedCategory = Boolean(categoryRulesLoaded && formData.dob && formData.section);
+  const selectedRegistrationEvent = events.find(event => event.name === formData.event);
+  const dobOptional = isGroupEvent(selectedRegistrationEvent);
+  const eventAvailabilityText = hasResolvedCategory
+    ? `${availableEvents.length} available for ${formData.section} • ${formData.sex}`
+    : `${availableEvents.length} Group events until DOB is selected`;
+  const eventPlaceholder = !categoryRulesLoaded
+    ? '-- Loading categories; Group events only --'
+    : !formData.dob
+      ? availableEvents.length > 0
+        ? `-- Select Group Event (${availableEvents.length} available) --`
+        : '-- Select DOB to view section events --'
+      : availableEvents.length > 0
+        ? `-- Select Event (${availableEvents.length} available for ${formData.section} • ${formData.sex}) --`
+        : `-- No events available for ${formData.section} • ${formData.sex} --`;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'dob') {
-      const detectedCategory = getCategoryForDob(value, categoryRules);
-      const newSec = detectedCategory || formData.section;
-      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, newSec, formData.sex));
+      const selectedEvent = events.find(event => event.name === formData.event);
+      const newSec = value
+        ? (categoryRulesLoaded ? getCategoryForDob(value, categoryRules) : '')
+        : (isGroupEvent(selectedEvent) ? 'Group' : '');
+      const validForNew = events.filter(ev => isRegistrationEventAvailable(ev, newSec, formData.sex));
       const currentValid = validForNew.some(ev => ev.name === formData.event);
       setFormData(prev => ({
         ...prev,
         dob: value,
         section: newSec,
-        event: currentValid ? prev.event : (validForNew[0]?.name || ''),
+        event: currentValid ? prev.event : '',
+      }));
+    } else if (name === 'event') {
+      const selectedEvent = events.find(event => event.name === value);
+      setFormData(prev => ({
+        ...prev,
+        event: value,
+        section: prev.dob
+          ? (categoryRulesLoaded ? getCategoryForDob(prev.dob, categoryRules) : '')
+          : (isGroupEvent(selectedEvent) ? 'Group' : ''),
       }));
     } else if (name === 'mekhala') {
       setFormData(prev => ({
         ...prev,
         mekhala: value,
-        sakha: '', // Reset sakha when mekhala changes
+        parish: '', // Reset parish when mekhala changes
       }));
     } else if (name === 'section' || name === 'sex') {
       const newSec = name === 'section' ? value : formData.section;
       const newSex = name === 'sex' ? value : formData.sex;
-      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, newSec, newSex));
+      const validForNew = events.filter(ev => isRegistrationEventAvailable(ev, newSec, newSex));
       const currentValid = validForNew.some(ev => ev.name === formData.event);
       setFormData(prev => ({
         ...prev,
         [name]: value,
-        event: currentValid ? prev.event : (validForNew[0]?.name || ''),
+        event: currentValid ? prev.event : '',
       }));
     } else {
       setFormData(prev => ({
@@ -123,10 +175,23 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     setStatusMessage(null);
+    const isGroupRegistration = isGroupEvent(selectedRegistrationEvent);
 
     // Form validation
-    if (!formData.name.trim() || !formData.houseName.trim() || !formData.dob) {
-      setStatusMessage({ type: 'error', text: 'Please fill in Name, House Name, and Date of Birth.' });
+    if (!formData.name.trim() || !formData.houseName.trim()) {
+      setStatusMessage({ type: 'error', text: 'Please fill in Candidate Name and House Name.' });
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.dob && !isGroupRegistration) {
+      setStatusMessage({ type: 'error', text: 'Date of Birth is required unless you select a Group event.' });
+      setLoading(false);
+      return;
+    }
+
+    if (formData.dob && (!categoryRulesLoaded || !formData.section)) {
+      setStatusMessage({ type: 'error', text: 'Candidate category is still loading. Please try again shortly.' });
       setLoading(false);
       return;
     }
@@ -137,8 +202,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!formData.mekhala || !formData.sakha) {
-      setStatusMessage({ type: 'error', text: 'Please select both Mekhala and Sakha.' });
+    if (!formData.mekhala || !formData.parish) {
+      setStatusMessage({ type: 'error', text: 'Please select both Mekhala and Parish.' });
       setLoading(false);
       return;
     }
@@ -153,7 +218,11 @@ export default function RegisterPage() {
       const res = await fetch('/api/candidates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          section: isGroupRegistration && !formData.dob ? 'Group' : formData.section,
+          dob: formData.dob || '',
+        }),
       });
 
       const result = await res.json();
@@ -161,17 +230,16 @@ export default function RegisterPage() {
         setRegisteredCandidate(result.data);
         setStatusMessage({ type: 'success', text: 'Candidate successfully registered!' });
         // Reset form
-        const validForJuniorMale = events.filter(ev => isEventAvailableForCandidate(ev, 'Junior', 'Male'));
         setFormData({
           name: '',
           houseName: '',
           dob: '',
           phone: '',
           mekhala: '',
-          sakha: '',
-          section: 'Junior',
+          parish: '',
+          section: '',
           sex: 'Male',
-          event: validForJuniorMale[0]?.name || '',
+          event: '',
         });
       } else {
         if (result.isClosed) {
@@ -186,10 +254,6 @@ export default function RegisterPage() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
     <div className="container" style={{ paddingTop: '2.5rem', paddingBottom: '3rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
@@ -197,9 +261,6 @@ export default function RegisterPage() {
           <span>✨</span> Official Registration Portal
         </div>
         <h1 className="hero-title" style={{ fontSize: '2.4rem' }}>Candidate Registration</h1>
-        <p className="hero-subtitle">
-          Register candidates for festival events. Chest numbers will be assigned by the administration after registrations close.
-        </p>
 
         {regStatus.isOpen && regStatus.endDateFormatted && (
           <div style={{
@@ -286,7 +347,7 @@ export default function RegisterPage() {
               flexWrap: 'wrap'
             }}>
               <div>📍 <strong>Mekhala:</strong> {registeredCandidate.mekhala}</div>
-              <div>🏢 <strong>Sakha:</strong> {registeredCandidate.sakha}</div>
+              <div>🏢 <strong>Parish:</strong> {registeredCandidate.parish}</div>
               <div>🎪 <strong>Event:</strong> {registeredCandidate.event}</div>
             </div>
           </div>
@@ -298,13 +359,6 @@ export default function RegisterPage() {
               onClick={() => setRegisteredCandidate(null)}
             >
               ➕ Register Another Candidate
-            </button>
-            <button 
-              type="button" 
-              className="btn btn-secondary"
-              onClick={handlePrint}
-            >
-              🖨️ Print Receipt
             </button>
           </div>
         </div>
@@ -340,7 +394,6 @@ export default function RegisterPage() {
                   type="text"
                   name="name"
                   className="form-input"
-                  placeholder="e.g. Muhammed Nihal"
                   value={formData.name}
                   onChange={handleChange}
                   required
@@ -357,7 +410,6 @@ export default function RegisterPage() {
                   type="text"
                   name="houseName"
                   className="form-input"
-                  placeholder="e.g. Rose Villa, Kuttikkat House"
                   value={formData.houseName}
                   onChange={handleChange}
                   required
@@ -367,7 +419,9 @@ export default function RegisterPage() {
               {/* DOB */}
               <div className="form-group">
                 <label className="form-label" htmlFor="dob">
-                  Date of Birth (DOB) <span className="req">*</span>
+                  Date of Birth (DOB) {dobOptional
+                    ? <span style={{ color: 'var(--text-muted)', fontWeight: 'normal' }}>(optional for Group events)</span>
+                    : <span className="req">*</span>}
                 </label>
                 <input
                   id="dob"
@@ -377,7 +431,6 @@ export default function RegisterPage() {
                   value={formData.dob}
                   max={new Date().toISOString().split('T')[0]}
                   onChange={handleChange}
-                  required
                 />
                 {formData.dob && (
                   <div style={{
@@ -407,7 +460,6 @@ export default function RegisterPage() {
                   type="tel"
                   name="phone"
                   className="form-input"
-                  placeholder="e.g. 9847123456"
                   value={formData.phone}
                   onChange={handleChange}
                   required
@@ -437,7 +489,7 @@ export default function RegisterPage() {
                 <label className="form-label">
                   Section / Category
                 </label>
-                {formData.dob ? (
+                {formData.section ? (
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -454,7 +506,9 @@ export default function RegisterPage() {
                         {formData.section || '—'}
                       </span>
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                        Auto-assigned from Date of Birth · Cannot be changed manually
+                        {formData.dob
+                          ? 'Auto-assigned from Date of Birth · Cannot be changed manually'
+                          : 'Assigned from selected Group event'}
                       </div>
                     </div>
                   </div>
@@ -468,7 +522,9 @@ export default function RegisterPage() {
                     fontSize: '0.82rem',
                     color: 'var(--text-muted)',
                   }}>
-                    📅 Please select a Date of Birth above — category will be assigned automatically.
+                    {formData.dob
+                      ? 'Category rules are loading; section events will appear shortly.'
+                      : '📅 Please select a Date of Birth above — category will be assigned automatically.'}
                   </div>
                 )}
                 {/* Hidden input keeps the value in the form */}
@@ -497,24 +553,24 @@ export default function RegisterPage() {
                 </select>
               </div>
 
-              {/* Sakha */}
+              {/* Parish */}
               <div className="form-group">
-                <label className="form-label" htmlFor="sakha">
-                  Sakha <span className="req">*</span>
+                <label className="form-label" htmlFor="parish">
+                  Parish <span className="req">*</span>
                 </label>
                 <select
-                  id="sakha"
-                  name="sakha"
+                  id="parish"
+                  name="parish"
                   className="form-select"
-                  value={formData.sakha}
+                  value={formData.parish}
                   onChange={handleChange}
                   required
                   disabled={!formData.mekhala}
                 >
                   <option value="">
-                    {formData.mekhala ? '-- Select Sakha --' : '-- Choose Mekhala First --'}
+                    {formData.mekhala ? '-- Select Parish --' : '-- Choose Mekhala First --'}
                   </option>
-                  {availableSakhas.map(s => (
+                  {availableParishes.map(s => (
                     <option key={s._id || s.name} value={s.name}>
                       {s.name}
                     </option>
@@ -527,7 +583,7 @@ export default function RegisterPage() {
                 <label className="form-label" htmlFor="event">
                   Event <span className="req">*</span>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem', fontWeight: 'normal' }}>
-                    ({availableEvents.length} available for {formData.section} • {formData.sex})
+                    ({eventAvailabilityText})
                   </span>
                 </label>
                 <select
@@ -539,11 +595,7 @@ export default function RegisterPage() {
                   required
                   disabled={availableEvents.length === 0}
                 >
-                  <option value="">
-                    {availableEvents.length > 0
-                      ? `-- Select Event (${availableEvents.length} available for ${formData.section} • ${formData.sex}) --`
-                      : `-- No events available for ${formData.section} • ${formData.sex} --`}
-                  </option>
+                  <option value="">{eventPlaceholder}</option>
                   {availableEvents.map(ev => {
                     const catDisplay = formatEventCategories(ev);
                     const genderDisplay = formatEventGender(ev);
@@ -556,7 +608,9 @@ export default function RegisterPage() {
                 </select>
                 {availableEvents.length === 0 && (
                   <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.35rem' }}>
-                    ⚠️ No events are currently configured for <strong>{formData.section} ({formData.sex})</strong>. Please select another section or contact the administrator.
+                    ⚠️ {hasResolvedCategory
+                      ? <>No events are configured for <strong>{formData.section} ({formData.sex})</strong>.</>
+                      : 'No Group events are configured. Section events appear after category rules load and a DOB is selected.'}
                   </p>
                 )}
               </div>

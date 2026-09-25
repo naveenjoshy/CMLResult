@@ -44,3 +44,7 @@ next-env.d.ts
 
 # Scripts
 scripts/
+!scripts/
+scripts/*
+!scripts/init-db.mjs
+!scripts/update-db.mjs
