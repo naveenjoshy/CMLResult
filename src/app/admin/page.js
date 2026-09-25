@@ -291,7 +291,7 @@ export default function AdminPage() {
     }
   };
 
-  // 5. CANDIDATE EDITING
+  // 5. CANDIDATE EDITING & CHEST NUMBER ISSUANCE
   const handleSaveCandidateEdit = async (e) => {
     e.preventDefault();
     if (!editingCandidate) return;
@@ -302,6 +302,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingCandidate._id,
+          chestNo: (editingCandidate.chestNo || '').trim(),
           name: editingCandidate.name,
           houseName: editingCandidate.houseName,
           dob: editingCandidate.dob,
@@ -316,13 +317,105 @@ export default function AdminPage() {
       const json = await res.json();
       if (json.success) {
         setCandidates(prev => prev.map(c => c._id === editingCandidate._id ? json.data : c));
-        notify('success', 'Candidate details updated!');
+        notify('success', 'Candidate details & Chest Number updated!');
         setEditingCandidate(null);
       } else {
         notify('error', json.message || 'Failed to update candidate');
       }
     } catch (err) {
       notify('error', 'Failed to update candidate');
+    }
+  };
+
+  // Issue Chest Numbers to all candidates who don't have one yet
+  const handleAutoAssignChestNumbers = async () => {
+    const unassigned = candidates.filter(c => !c.chestNo || c.chestNo.trim() === '');
+    if (unassigned.length === 0) {
+      notify('success', 'All candidates already have chest numbers issued!');
+      return;
+    }
+
+    if (!confirm(`Issue sequential chest numbers to ${unassigned.length} candidate(s)?`)) return;
+
+    // Find highest existing numeric chest number
+    let maxNum = 100;
+    candidates.forEach(c => {
+      if (c.chestNo) {
+        const match = c.chestNo.match(/\d+/);
+        if (match) {
+          const num = parseInt(match[0], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+
+    let count = 0;
+    for (const cand of unassigned) {
+      maxNum += 1;
+      const newChest = `CML-${maxNum}`;
+      try {
+        const res = await fetch('/api/candidates', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: cand._id, chestNo: newChest }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          setCandidates(prev => prev.map(c => c._id === cand._id ? json.data : c));
+          count += 1;
+        }
+      } catch (err) {
+        console.error('Error assigning chest number:', err);
+      }
+    }
+    notify('success', `Issued chest numbers to ${count} candidate(s)!`);
+  };
+
+  // Admin Add Candidate (Bypasses public registration deadline)
+  const [showAdminAddCandidateModal, setShowAdminAddCandidateModal] = useState(false);
+  const [adminCandidateForm, setAdminCandidateForm] = useState({
+    name: '',
+    houseName: '',
+    dob: '',
+    phone: '',
+    mekhala: '',
+    sakha: '',
+    section: 'Junior',
+    sex: 'Male',
+    event: '',
+    chestNo: '',
+  });
+
+  const handleAdminCandidateSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...adminCandidateForm, isAdmin: true }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCandidates(prev => [json.data, ...prev]);
+        notify('success', `Candidate "${adminCandidateForm.name}" registered successfully!`);
+        setShowAdminAddCandidateModal(false);
+        setAdminCandidateForm({
+          name: '',
+          houseName: '',
+          dob: '',
+          phone: '',
+          mekhala: mekhalas[0]?.name || '',
+          sakha: '',
+          section: 'Junior',
+          sex: 'Male',
+          event: events[0]?.name || '',
+          chestNo: '',
+        });
+      } else {
+        notify('error', json.message || 'Failed to register candidate');
+      }
+    } catch (err) {
+      notify('error', 'Error submitting candidate');
     }
   };
 
@@ -848,9 +941,37 @@ export default function AdminPage() {
                 onChange={(e) => setCandidateSearch(e.target.value)}
               />
             </div>
-            <Link href="/register" className="btn btn-primary btn-sm">
-              ➕ Register New
-            </Link>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleAutoAssignChestNumbers}
+                title="Automatically assign sequential chest numbers to all unissued candidates"
+              >
+                ⚡ Issue Chest Numbers ({candidates.filter(c => !c.chestNo || c.chestNo.trim() === '').length} Pending)
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setAdminCandidateForm({
+                    name: '',
+                    houseName: '',
+                    dob: '',
+                    phone: '',
+                    mekhala: mekhalas[0]?.name || '',
+                    sakha: '',
+                    section: 'Junior',
+                    sex: 'Male',
+                    event: events[0]?.name || '',
+                    chestNo: '',
+                  });
+                  setShowAdminAddCandidateModal(true);
+                }}
+              >
+                ➕ Add Candidate (Admin)
+              </button>
+            </div>
           </div>
 
           <div className="table-wrapper">
@@ -881,9 +1002,23 @@ export default function AdminPage() {
                   filteredCandidates.map(c => (
                     <tr key={c._id}>
                       <td>
-                        <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                          {c.chestNo}
-                        </span>
+                        {c.chestNo ? (
+                          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                            {c.chestNo}
+                          </span>
+                        ) : (
+                          <span style={{
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#fbbf24',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            ⏳ Pending
+                          </span>
+                        )}
                       </td>
                       <td><strong style={{ color: '#fff' }}>{c.name}</strong></td>
                       <td>{c.houseName}</td>
@@ -1102,6 +1237,19 @@ export default function AdminPage() {
 
             <form onSubmit={handleSaveCandidateEdit}>
               <div className="form-grid">
+                <div className="form-group full-width" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">
+                    Official Chest Number <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Issued after registration completion)</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. CML-101"
+                    value={editingCandidate.chestNo || ''}
+                    onChange={(e) => setEditingCandidate({ ...editingCandidate, chestNo: e.target.value })}
+                  />
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Candidate Name *</label>
                   <input
@@ -1233,6 +1381,184 @@ export default function AdminPage() {
                   className="btn btn-primary"
                 >
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN ADD CANDIDATE MODAL (Bypasses public registration deadline) */}
+      {showAdminAddCandidateModal && (
+        <div className="modal-overlay" onClick={() => setShowAdminAddCandidateModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">Add Candidate (Admin Entry)</h3>
+                <span style={{ fontSize: '0.8rem', color: '#34d399' }}>
+                  ✓ Bypasses public registration deadline
+                </span>
+              </div>
+              <button 
+                type="button" 
+                className="modal-close"
+                onClick={() => setShowAdminAddCandidateModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminCandidateSubmit}>
+              <div className="form-grid">
+                <div className="form-group full-width" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">
+                    Chest Number <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Leave blank to issue later)</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. CML-105"
+                    value={adminCandidateForm.chestNo}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, chestNo: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Candidate Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={adminCandidateForm.name}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">House Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={adminCandidateForm.houseName}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, houseName: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Date of Birth *</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={adminCandidateForm.dob}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, dob: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Phone Number *</label>
+                  <input
+                    type="tel"
+                    className="form-input"
+                    placeholder="e.g. 9847123456"
+                    value={adminCandidateForm.phone}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, phone: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Sex *</label>
+                  <select
+                    className="form-select"
+                    value={adminCandidateForm.sex}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, sex: e.target.value })}
+                    required
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Mekhala *</label>
+                  <select
+                    className="form-select"
+                    value={adminCandidateForm.mekhala}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, mekhala: e.target.value, sakha: '' })}
+                    required
+                  >
+                    <option value="">-- Select Mekhala --</option>
+                    {mekhalas.map(m => (
+                      <option key={m._id || m.name} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Sakha *</label>
+                  <select
+                    className="form-select"
+                    value={adminCandidateForm.sakha}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, sakha: e.target.value })}
+                    required
+                  >
+                    <option value="">-- Select Sakha --</option>
+                    {sakhas
+                      .filter(s => !adminCandidateForm.mekhala || s.mekhala === adminCandidateForm.mekhala)
+                      .map(s => (
+                        <option key={s._id || s.name} value={s.name}>{s.name}</option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Section *</label>
+                  <select
+                    className="form-select"
+                    value={adminCandidateForm.section}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, section: e.target.value })}
+                    required
+                  >
+                    <option value="Sub-Junior">Sub-Junior</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Super Senior">Super Senior</option>
+                    <option value="General">General</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Event *</label>
+                  <select
+                    className="form-select"
+                    value={adminCandidateForm.event}
+                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, event: e.target.value })}
+                    required
+                  >
+                    <option value="">-- Select Event --</option>
+                    {events.map(ev => (
+                      <option key={ev._id || ev.name} value={ev.name}>{ev.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAdminAddCandidateModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                >
+                  Register Candidate
                 </button>
               </div>
             </form>

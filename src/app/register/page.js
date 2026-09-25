@@ -19,27 +19,31 @@ export default function RegisterPage() {
   const [mekhalas, setMekhalas] = useState([]);
   const [sakhas, setSakhas] = useState([]);
   const [events, setEvents] = useState([]);
+  const [regStatus, setRegStatus] = useState({ isOpen: true, endDate: null, endDateFormatted: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
   const [statusMessage, setStatusMessage] = useState(null);
   const [registeredCandidate, setRegisteredCandidate] = useState(null);
 
-  // Fetch Mekhalas, Sakhas, and Events
+  // Fetch Mekhalas, Sakhas, Events, and Registration Status
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [resM, resS, resE] = await Promise.all([
+        const [resM, resS, resE, resReg] = await Promise.all([
           fetch('/api/mekhalas'),
           fetch('/api/sakhas'),
           fetch('/api/events'),
+          fetch('/api/registration-status'),
         ]);
 
         const dataM = await resM.json();
         const dataS = await resS.json();
         const dataE = await resE.json();
+        const dataReg = await resReg.json();
 
         if (dataM.success) setMekhalas(dataM.data || []);
         if (dataS.success) setSakhas(dataS.data || []);
+        if (dataReg.success) setRegStatus(dataReg);
         if (dataE.success) {
           const evList = dataE.data || [];
           setEvents(evList);
@@ -131,6 +135,9 @@ export default function RegisterPage() {
           event: events[0]?.name || '',
         });
       } else {
+        if (result.isClosed) {
+          setRegStatus(prev => ({ ...prev, isOpen: false }));
+        }
         setStatusMessage({ type: 'error', text: result.message || 'Registration failed' });
       }
     } catch (err) {
@@ -152,44 +159,81 @@ export default function RegisterPage() {
         </div>
         <h1 className="hero-title" style={{ fontSize: '2.4rem' }}>Candidate Registration</h1>
         <p className="hero-subtitle">
-          Register candidates for festival events. Chest numbers and tracking will be automatically generated.
+          Register candidates for festival events. Chest numbers will be assigned by the administration after registrations close.
         </p>
+
+        {regStatus.isOpen && regStatus.endDateFormatted && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.4rem 1rem',
+            borderRadius: 'var(--radius-full)',
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            color: '#fbbf24',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+          }}>
+            <span>⏳</span> Registration Deadline: <strong>{regStatus.endDateFormatted}</strong>
+          </div>
+        )}
       </div>
 
-      {statusMessage && (
-        <div style={{
-          maxWidth: '780px',
-          margin: '0 auto 1.5rem',
-          padding: '1rem 1.25rem',
-          borderRadius: 'var(--radius-md)',
-          background: statusMessage.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-          border: `1px solid ${statusMessage.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
-          color: statusMessage.type === 'success' ? '#34d399' : '#fb7185',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-        }}>
-          <span>{statusMessage.type === 'success' ? '✅' : '⚠️'}</span>
-          <span>{statusMessage.text}</span>
+      {/* REGISTRATION CLOSED SCREEN */}
+      {!regStatus.isOpen ? (
+        <div className="glass-panel form-card" style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
+          <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>⛔</div>
+          <div className="hero-pill" style={{
+            background: 'rgba(244, 63, 94, 0.15)',
+            borderColor: 'rgba(244, 63, 94, 0.3)',
+            color: '#fb7185'
+          }}>
+            Registration Closed
+          </div>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', color: '#fff', margin: '1rem 0 0.5rem' }}>
+            Registration Date is Over
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: '520px', margin: '0 auto 2rem' }}>
+            registration date is over, contact admin for more details.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <Link href="/" className="btn btn-primary">
+              🏆 View Results & Dashboard
+            </Link>
+            <Link href="/admin" className="btn btn-secondary">
+              ⚙️ Admin Login
+            </Link>
+          </div>
         </div>
-      )}
-
-      {registeredCandidate ? (
+      ) : registeredCandidate ? (
+        /* REGISTRATION CONFIRMATION CARD (NO AUTO CHEST NUMBER) */
         <div className="glass-panel form-card" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🎉</div>
           <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.8rem', color: '#fff', marginBottom: '0.5rem' }}>
             Registration Successful!
           </h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-            Candidate has been registered to database <strong>CMLResult</strong>.
+            Candidate details recorded. Official Chest Number will be issued by the fest administration after registration completes.
           </p>
 
           <div className="candidate-badge-card">
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              OFFICIAL CHEST NUMBER
+            <span style={{
+              display: 'inline-block',
+              fontSize: '0.85rem',
+              color: '#fbbf24',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: 700,
+              background: 'rgba(245, 158, 11, 0.15)',
+              padding: '0.35rem 0.85rem',
+              borderRadius: 'var(--radius-full)',
+              marginBottom: '0.75rem'
+            }}>
+              ⏳ Chest Number: Pending Admin Issuance
             </span>
-            <div className="chest-number-big">{registeredCandidate.chestNo}</div>
-            <h3 style={{ fontSize: '1.4rem', color: '#fff', margin: '0.5rem 0 0.25rem' }}>
+            
+            <h3 style={{ fontSize: '1.5rem', color: '#fff', margin: '0.5rem 0 0.25rem' }}>
               {registeredCandidate.name}
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
@@ -200,11 +244,12 @@ export default function RegisterPage() {
               display: 'flex', 
               justifyContent: 'center', 
               gap: '1rem', 
-              marginTop: '1rem',
+              marginTop: '1.25rem',
               paddingTop: '1rem',
               borderTop: '1px dashed rgba(255, 255, 255, 0.1)',
               fontSize: '0.9rem',
-              color: 'var(--text-secondary)'
+              color: 'var(--text-secondary)',
+              flexWrap: 'wrap'
             }}>
               <div>📍 <strong>Mekhala:</strong> {registeredCandidate.mekhala}</div>
               <div>🏢 <strong>Sakha:</strong> {registeredCandidate.sakha}</div>
@@ -212,7 +257,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap' }}>
             <button 
               type="button" 
               className="btn btn-primary"
@@ -225,7 +270,7 @@ export default function RegisterPage() {
               className="btn btn-secondary"
               onClick={handlePrint}
             >
-              🖨️ Print Badge
+              🖨️ Print Receipt
             </button>
             <Link href="/" className="btn btn-secondary">
               🏆 View Dashboard
@@ -233,7 +278,25 @@ export default function RegisterPage() {
           </div>
         </div>
       ) : (
+        /* REGISTRATION FORM */
         <div className="glass-panel form-card">
+          {statusMessage && (
+            <div style={{
+              margin: '0 auto 1.5rem',
+              padding: '1rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
+              background: statusMessage.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+              border: `1px solid ${statusMessage.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
+              color: statusMessage.type === 'success' ? '#34d399' : '#fb7185',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+            }}>
+              <span>{statusMessage.type === 'success' ? '✅' : '⚠️'}</span>
+              <span>{statusMessage.text}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               {/* Candidate Name */}
@@ -322,6 +385,27 @@ export default function RegisterPage() {
                 </select>
               </div>
 
+              {/* Section */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="section">
+                  Section <span className="req">*</span>
+                </label>
+                <select
+                  id="section"
+                  name="section"
+                  className="form-select"
+                  value={formData.section}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="Sub-Junior">Sub-Junior</option>
+                  <option value="Junior">Junior</option>
+                  <option value="Senior">Senior</option>
+                  <option value="Super Senior">Super Senior</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
+
               {/* Mekhala */}
               <div className="form-group">
                 <label className="form-label" htmlFor="mekhala">
@@ -369,29 +453,8 @@ export default function RegisterPage() {
                 </select>
               </div>
 
-              {/* Section */}
-              <div className="form-group">
-                <label className="form-label" htmlFor="section">
-                  Section <span className="req">*</span>
-                </label>
-                <select
-                  id="section"
-                  name="section"
-                  className="form-select"
-                  value={formData.section}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="Sub-Junior">Sub-Junior</option>
-                  <option value="Junior">Junior</option>
-                  <option value="Senior">Senior</option>
-                  <option value="Super Senior">Super Senior</option>
-                  <option value="General">General</option>
-                </select>
-              </div>
-
               {/* Event */}
-              <div className="form-group">
+              <div className="form-group full-width">
                 <label className="form-label" htmlFor="event">
                   Event <span className="req">*</span>
                 </label>
@@ -417,10 +480,10 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 className="btn btn-primary"
-                style={{ minWidth: '200px' }}
+                style={{ minWidth: '220px' }}
                 disabled={loading || fetchingData}
               >
-                {loading ? 'Registering...' : 'Complete Registration 🚀'}
+                {loading ? 'Submitting...' : 'Submit Registration 🚀'}
               </button>
             </div>
           </form>

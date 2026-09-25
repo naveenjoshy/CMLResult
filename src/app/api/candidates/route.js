@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/db';
 import Candidate from '@/models/Candidate';
 import Event from '@/models/Event';
 import { getMemoryStore } from '@/lib/memoryStore';
+import { isRegistrationOpen } from '@/app/api/registration-status/route';
 
 // Helper to compute points from event rules
 function calculatePoints(event, position, grade) {
@@ -89,7 +90,19 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, houseName, dob, phone, sakha, mekhala, section, sex, event, chestNo } = body;
+    const { name, houseName, dob, phone, sakha, mekhala, section, sex, event, chestNo, isAdmin } = body;
+
+    // Check registration deadline for non-admin requests
+    if (!isAdmin) {
+      const regStatus = isRegistrationOpen();
+      if (!regStatus.isOpen) {
+        return NextResponse.json({
+          success: false,
+          isClosed: true,
+          message: 'Registration date is over, contact admin for more details.',
+        }, { status: 403 });
+      }
+    }
 
     if (!name || !houseName || !dob || !sakha || !mekhala || !section || !sex || !event) {
       return NextResponse.json({
@@ -98,11 +111,13 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
+    // Do NOT auto-issue chest number. Chest numbers are issued after registration is completed by the admin.
+    const finalChestNo = chestNo ? chestNo.trim() : '';
+
     const conn = await connectToDatabase();
     if (conn) {
       // Find event to get points config if position/grade provided
       const eventDoc = await Event.findOne({ name: event.trim() });
-      const finalChestNo = chestNo || ('CML-' + Math.floor(100 + Math.random() * 900));
       const position = body.position || 'None';
       const grade = body.grade || 'None';
       const totalPoints = calculatePoints(eventDoc, position, grade);
@@ -128,7 +143,6 @@ export async function POST(request) {
 
     const store = getMemoryStore();
     const eventDoc = store.events.find(e => e.name === event.trim());
-    const finalChestNo = chestNo || ('CML-' + (100 + store.candidates.length + 1));
     const position = body.position || 'None';
     const grade = body.grade || 'None';
     const totalPoints = calculatePoints(eventDoc, position, grade);
