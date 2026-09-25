@@ -42,9 +42,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Scripts
-scripts/
-!scripts/
-scripts/*
-!scripts/init-db.mjs
-!scripts/update-db.mjs
+# Local scripts and migrations
+/scripts/
+/migrations/
