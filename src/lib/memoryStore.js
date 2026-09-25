@@ -6,9 +6,18 @@
 
 let memoryStore = {
   mekhalas: [
-    { _id: 'm1', name: 'North Zone', code: 'NZ', createdAt: new Date() },
-    { _id: 'm2', name: 'Central Zone', code: 'CZ', createdAt: new Date() },
-    { _id: 'm3', name: 'South Zone', code: 'SZ', createdAt: new Date() },
+    { _id: 'm1', name: 'Adimali - Koompanpara', code: 'AK', createdAt: new Date() },
+    { _id: 'm2', name: 'Churuly', code: 'CH', createdAt: new Date() },
+    { _id: 'm3', name: 'Erattayar', code: 'ER', createdAt: new Date() },
+    { _id: 'm4', name: 'Kunjithanny', code: 'KJ', createdAt: new Date() },
+    { _id: 'm5', name: 'Mankulam', code: 'MK', createdAt: new Date() },
+    { _id: 'm6', name: 'Murickassery', code: 'MU', createdAt: new Date() },
+    { _id: 'm7', name: 'Nedumkandom', code: 'ND', createdAt: new Date() },
+    { _id: 'm8', name: 'Parathode', code: 'PT', createdAt: new Date() },
+    { _id: 'm9', name: 'Rajakkadu', code: 'RJ', createdAt: new Date() },
+    { _id: 'm10', name: 'Thankamany', code: 'TM', createdAt: new Date() },
+    { _id: 'm11', name: 'Vazhathope', code: 'VZ', createdAt: new Date() },
+    { _id: 'm12', name: 'Vellayamkudy', code: 'VY', createdAt: new Date() },
   ],
   sakhas: [
     { _id: 's1', name: 'Kozhikode Town', mekhala: 'North Zone', createdAt: new Date() },

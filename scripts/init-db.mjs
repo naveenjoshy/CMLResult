@@ -71,11 +71,18 @@ async function main() {
   if (mekhalaCount === 0) {
     console.log('Seeding initial Mekhalas...');
     await Mekhala.insertMany([
-      { name: 'North Zone', code: 'NZ' },
-      { name: 'Central Zone', code: 'CZ' },
-      { name: 'South Zone', code: 'SZ' },
-      { name: 'Kozhikode South', code: 'KS' },
-      { name: 'Malappuram East', code: 'ME' },
+      { name: 'Adimali - Koompanpara', code: 'AK' },
+      { name: 'Churuly', code: 'CH' },
+      { name: 'Erattayar', code: 'ER' },
+      { name: 'Kunjithanny', code: 'KJ' },
+      { name: 'Mankulam', code: 'MK' },
+      { name: 'Murickassery', code: 'MU' },
+      { name: 'Nedumkandom', code: 'ND' },
+      { name: 'Parathode', code: 'PT' },
+      { name: 'Rajakkadu', code: 'RJ' },
+      { name: 'Thankamany', code: 'TM' },
+      { name: 'Vazhathope', code: 'VZ' },
+      { name: 'Vellayamkudy', code: 'VY' },
     ]);
   }
 
