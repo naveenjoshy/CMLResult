@@ -1,0 +1,161 @@
+/**
+ * Resilient in-memory fallback store
+ * Used if MongoDB cluster URI is not configured yet or offline,
+ * so the application is immediately testable with starter seed data.
+ */
+
+let memoryStore = {
+  mekhalas: [
+    { _id: 'm1', name: 'North Zone', code: 'NZ', createdAt: new Date() },
+    { _id: 'm2', name: 'Central Zone', code: 'CZ', createdAt: new Date() },
+    { _id: 'm3', name: 'South Zone', code: 'SZ', createdAt: new Date() },
+  ],
+  sakhas: [
+    { _id: 's1', name: 'Kozhikode Town', mekhala: 'North Zone', createdAt: new Date() },
+    { _id: 's2', name: 'Vadakara', mekhala: 'North Zone', createdAt: new Date() },
+    { _id: 's3', name: 'Ernakulam City', mekhala: 'Central Zone', createdAt: new Date() },
+    { _id: 's4', name: 'Aluva', mekhala: 'Central Zone', createdAt: new Date() },
+    { _id: 's5', name: 'Trivandrum Central', mekhala: 'South Zone', createdAt: new Date() },
+    { _id: 's6', name: 'Kollam City', mekhala: 'South Zone', createdAt: new Date() },
+  ],
+  events: [
+    {
+      _id: 'e1',
+      name: 'Elocution (English)',
+      category: 'Junior',
+      description: 'Individual public speaking event',
+      points: {
+        first: 5,
+        second: 3,
+        third: 1,
+        gradeA: 5,
+        gradeB: 3,
+        gradeC: 1,
+      },
+      status: 'Completed',
+      createdAt: new Date(),
+    },
+    {
+      _id: 'e2',
+      name: 'Classical Music',
+      category: 'Senior',
+      description: 'Solo vocal competition',
+      points: {
+        first: 5,
+        second: 3,
+        third: 1,
+        gradeA: 5,
+        gradeB: 3,
+        gradeC: 1,
+      },
+      status: 'Completed',
+      createdAt: new Date(),
+    },
+    {
+      _id: 'e3',
+      name: 'Quiz Competition',
+      category: 'General',
+      description: 'General knowledge & history',
+      points: {
+        first: 5,
+        second: 3,
+        third: 1,
+        gradeA: 5,
+        gradeB: 3,
+        gradeC: 1,
+      },
+      status: 'In Progress',
+      createdAt: new Date(),
+    },
+    {
+      _id: 'e4',
+      name: 'Essay Writing',
+      category: 'Sub-Junior',
+      description: 'Creative and analytical writing',
+      points: {
+        first: 5,
+        second: 3,
+        third: 1,
+        gradeA: 5,
+        gradeB: 3,
+        gradeC: 1,
+      },
+      status: 'Upcoming',
+      createdAt: new Date(),
+    }
+  ],
+  candidates: [
+    {
+      _id: 'c1',
+      chestNo: 'CML-101',
+      name: 'Muhammed Nihal',
+      houseName: 'Rose Villa',
+      dob: '2008-05-14',
+      phone: '9847123456',
+      sakha: 'Kozhikode Town',
+      mekhala: 'North Zone',
+      section: 'Junior',
+      sex: 'Male',
+      event: 'Elocution (English)',
+      position: 'First',
+      grade: 'A',
+      totalPoints: 10, // 5 (1st) + 5 (Grade A)
+      createdAt: new Date(),
+    },
+    {
+      _id: 'c2',
+      chestNo: 'CML-102',
+      name: 'Fathima Zahra',
+      houseName: 'Green Meadows',
+      dob: '2009-08-22',
+      phone: '9847654321',
+      sakha: 'Vadakara',
+      mekhala: 'North Zone',
+      section: 'Junior',
+      sex: 'Female',
+      event: 'Elocution (English)',
+      position: 'Second',
+      grade: 'A',
+      totalPoints: 8, // 3 (2nd) + 5 (Grade A)
+      createdAt: new Date(),
+    },
+    {
+      _id: 'c3',
+      chestNo: 'CML-103',
+      name: 'Aysha Mariyam',
+      houseName: 'Sunrise Cottage',
+      dob: '2007-02-10',
+      phone: '9745112233',
+      sakha: 'Ernakulam City',
+      mekhala: 'Central Zone',
+      section: 'Senior',
+      sex: 'Female',
+      event: 'Classical Music',
+      position: 'First',
+      grade: 'A',
+      totalPoints: 10,
+      createdAt: new Date(),
+    },
+    {
+      _id: 'c4',
+      chestNo: 'CML-104',
+      name: 'Bilal Ahmed',
+      houseName: 'Al-Barka House',
+      dob: '2006-11-03',
+      phone: '9895001122',
+      sakha: 'Trivandrum Central',
+      mekhala: 'South Zone',
+      section: 'Senior',
+      sex: 'Male',
+      event: 'Classical Music',
+      position: 'Second',
+      grade: 'B',
+      totalPoints: 6, // 3 + 3
+      createdAt: new Date(),
+    },
+  ],
+};
+
+export function getMemoryStore() {
+  return memoryStore;
+}
