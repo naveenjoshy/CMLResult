@@ -2,26 +2,32 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Event from '@/models/Event';
 import { getMemoryStore } from '@/lib/memoryStore';
+import { getSectionEventName } from '@/lib/eventUtils';
 
 export async function GET() {
   try {
-    const conn = await connectToDatabase();
-    if (conn) {
-      const events = await Event.find({}).sort({ createdAt: -1 });
-      return NextResponse.json({ success: true, data: events, source: 'mongodb' });
+    try {
+      const conn = await connectToDatabase();
+      if (conn) {
+        const events = await Event.find({}).sort({ createdAt: -1 });
+        return NextResponse.json({ success: true, data: events, source: 'mongodb' });
+      }
+    } catch (dbErr) {
+      console.warn('[Events GET] MongoDB error, falling back to memory store:', dbErr.message);
     }
-  } catch (err) {
-    console.warn('[Events GET] MongoDB error, falling back to memory store:', err.message);
-  }
 
-  const store = getMemoryStore();
-  return NextResponse.json({ success: true, data: store.events, source: 'memory' });
+    const store = getMemoryStore();
+    return NextResponse.json({ success: true, data: store.events, source: 'memory' });
+  } catch (err) {
+    console.error('[Events GET] Fatal error:', err);
+    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+  }
 }
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, category, description, points, status } = body;
+    const { name, category, categories, gender, description, points, status, separateEvents } = body;
 
     if (!name || name.trim() === '') {
       return NextResponse.json({ success: false, message: 'Event name is required' }, { status: 400 });
@@ -37,15 +43,91 @@ export async function POST(request) {
     };
 
     const trimmedName = name.trim();
-    const eventCategory = (category || 'General').trim();
+    
+    // Normalize categories to an array
+    let eventCategories = [];
+    if (Array.isArray(categories) && categories.length > 0) {
+      eventCategories = categories.map(c => String(c).trim()).filter(Boolean);
+    } else if (typeof category === 'string' && category.trim()) {
+      eventCategories = category.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    if (eventCategories.length === 0) {
+      eventCategories = ['General'];
+    }
+
+    const eventGender = ['Male', 'Female'].includes(gender) ? gender : 'Both';
     const eventDesc = (description || '').trim();
     const eventStatus = status || 'Upcoming';
 
+    // When multiple categories are selected, create individual events for each category by default
+    const shouldCreateSeparate = separateEvents !== false && eventCategories.length > 1;
+
     const conn = await connectToDatabase();
+
+    if (shouldCreateSeparate) {
+      const createdList = [];
+      if (conn) {
+        for (const sec of eventCategories) {
+          const eventName = getSectionEventName(trimmedName, sec);
+          // Check if an event with this exact name already exists
+          let evDoc = await Event.findOne({ name: eventName });
+          if (!evDoc) {
+            evDoc = await Event.create({
+              name: eventName,
+              category: sec,
+              categories: [sec],
+              gender: eventGender,
+              description: eventDesc,
+              points: defaultPoints,
+              status: eventStatus,
+            });
+          }
+          createdList.push(evDoc);
+        }
+        return NextResponse.json({ 
+          success: true, 
+          data: createdList, 
+          count: createdList.length, 
+          source: 'mongodb' 
+        }, { status: 201 });
+      }
+
+      const store = getMemoryStore();
+      for (const sec of eventCategories) {
+        const eventName = getSectionEventName(trimmedName, sec);
+        let evDoc = store.events.find(e => e.name === eventName);
+        if (!evDoc) {
+          evDoc = {
+            _id: 'e_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            name: eventName,
+            category: sec,
+            categories: [sec],
+            gender: eventGender,
+            description: eventDesc,
+            points: defaultPoints,
+            status: eventStatus,
+            createdAt: new Date(),
+          };
+          store.events.unshift(evDoc);
+        }
+        createdList.push(evDoc);
+      }
+      return NextResponse.json({ 
+        success: true, 
+        data: createdList, 
+        count: createdList.length, 
+        source: 'memory' 
+      }, { status: 201 });
+    }
+
+    // Single event creation
+    const eventCategory = eventCategories.join(', ');
     if (conn) {
       const created = await Event.create({
         name: trimmedName,
         category: eventCategory,
+        categories: eventCategories,
+        gender: eventGender,
         description: eventDesc,
         points: defaultPoints,
         status: eventStatus,
@@ -58,6 +140,8 @@ export async function POST(request) {
       _id: 'e_' + Date.now(),
       name: trimmedName,
       category: eventCategory,
+      categories: eventCategories,
+      gender: eventGender,
       description: eventDesc,
       points: defaultPoints,
       status: eventStatus,
@@ -74,7 +158,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, name, category, description, points, status } = body;
+    const { id, name, category, categories, gender, description, points, status } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, message: 'Event ID is required' }, { status: 400 });
@@ -82,7 +166,21 @@ export async function PUT(request) {
 
     const updateData = {};
     if (name) updateData.name = name.trim();
-    if (category) updateData.category = category.trim();
+
+    if (categories !== undefined) {
+      const arr = Array.isArray(categories) ? categories.map(c => String(c).trim()).filter(Boolean) : [];
+      updateData.categories = arr;
+      updateData.category = arr.join(', ');
+    } else if (category !== undefined) {
+      const arr = typeof category === 'string' ? category.split(',').map(c => c.trim()).filter(Boolean) : [];
+      updateData.categories = arr;
+      updateData.category = category.trim();
+    }
+
+    if (gender !== undefined) {
+      updateData.gender = ['Male', 'Female'].includes(gender) ? gender : 'Both';
+    }
+
     if (description !== undefined) updateData.description = description.trim();
     if (status) updateData.status = status;
     if (points) {

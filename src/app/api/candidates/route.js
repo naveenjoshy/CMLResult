@@ -4,6 +4,7 @@ import Candidate from '@/models/Candidate';
 import Event from '@/models/Event';
 import { getMemoryStore } from '@/lib/memoryStore';
 import { isRegistrationOpen } from '@/app/api/registration-status/route';
+import { isEventAvailableForCandidate } from '@/lib/eventUtils';
 
 // Helper to compute points from event rules
 function calculatePoints(event, position, grade) {
@@ -30,6 +31,37 @@ function calculatePoints(event, position, grade) {
 
 export async function GET(request) {
   try {
+    try {
+      const { searchParams } = new URL(request.url);
+      const event = searchParams.get('event');
+      const mekhala = searchParams.get('mekhala');
+      const sakha = searchParams.get('sakha');
+      const section = searchParams.get('section');
+      const search = searchParams.get('search');
+
+      const conn = await connectToDatabase();
+      if (conn) {
+        const query = {};
+        if (event) query.event = event;
+        if (mekhala) query.mekhala = mekhala;
+        if (sakha) query.sakha = sakha;
+        if (section) query.section = section;
+        if (search) {
+          query.$or = [
+            { name: { $regex: search, $options: 'i' } },
+            { chestNo: { $regex: search, $options: 'i' } },
+            { houseName: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ];
+        }
+
+        const candidates = await Candidate.find(query).sort({ createdAt: -1 });
+        return NextResponse.json({ success: true, data: candidates, source: 'mongodb' });
+      }
+    } catch (err) {
+      console.warn('[Candidates GET] MongoDB error, falling back to memory store:', err.message);
+    }
+
     const { searchParams } = new URL(request.url);
     const event = searchParams.get('event');
     const mekhala = searchParams.get('mekhala');
@@ -37,54 +69,28 @@ export async function GET(request) {
     const section = searchParams.get('section');
     const search = searchParams.get('search');
 
-    const conn = await connectToDatabase();
-    if (conn) {
-      const query = {};
-      if (event) query.event = event;
-      if (mekhala) query.mekhala = mekhala;
-      if (sakha) query.sakha = sakha;
-      if (section) query.section = section;
-      if (search) {
-        query.$or = [
-          { name: { $regex: search, $options: 'i' } },
-          { chestNo: { $regex: search, $options: 'i' } },
-          { houseName: { $regex: search, $options: 'i' } },
-          { phone: { $regex: search, $options: 'i' } },
-        ];
-      }
+    const store = getMemoryStore();
+    let list = [...store.candidates];
 
-      const candidates = await Candidate.find(query).sort({ createdAt: -1 });
-      return NextResponse.json({ success: true, data: candidates, source: 'mongodb' });
+    if (event) list = list.filter(c => c.event === event);
+    if (mekhala) list = list.filter(c => c.mekhala === mekhala);
+    if (sakha) list = list.filter(c => c.sakha === sakha);
+    if (section) list = list.filter(c => c.section === section);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(c => 
+        c.name.toLowerCase().includes(q) ||
+        (c.chestNo && c.chestNo.toLowerCase().includes(q)) ||
+        (c.houseName && c.houseName.toLowerCase().includes(q)) ||
+        (c.phone && c.phone.toLowerCase().includes(q))
+      );
     }
-  } catch (err) {
-    console.warn('[Candidates GET] MongoDB error, falling back to memory store:', err.message);
+
+    return NextResponse.json({ success: true, data: list, source: 'memory' });
+  } catch (fatalErr) {
+    console.error('[Candidates GET] Fatal error:', fatalErr);
+    return NextResponse.json({ success: false, message: fatalErr.message }, { status: 500 });
   }
-
-  const { searchParams } = new URL(request.url);
-  const event = searchParams.get('event');
-  const mekhala = searchParams.get('mekhala');
-  const sakha = searchParams.get('sakha');
-  const section = searchParams.get('section');
-  const search = searchParams.get('search');
-
-  const store = getMemoryStore();
-  let list = [...store.candidates];
-
-  if (event) list = list.filter(c => c.event === event);
-  if (mekhala) list = list.filter(c => c.mekhala === mekhala);
-  if (sakha) list = list.filter(c => c.sakha === sakha);
-  if (section) list = list.filter(c => c.section === section);
-  if (search) {
-    const q = search.toLowerCase();
-    list = list.filter(c => 
-      c.name.toLowerCase().includes(q) ||
-      (c.chestNo && c.chestNo.toLowerCase().includes(q)) ||
-      (c.houseName && c.houseName.toLowerCase().includes(q)) ||
-      (c.phone && c.phone.toLowerCase().includes(q))
-    );
-  }
-
-  return NextResponse.json({ success: true, data: list, source: 'memory' });
 }
 
 export async function POST(request) {
@@ -111,6 +117,14 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
+    const trimmedSex = sex.trim();
+    if (!['Male', 'Female'].includes(trimmedSex)) {
+      return NextResponse.json({
+        success: false,
+        message: 'Sex must be either Male or Female',
+      }, { status: 400 });
+    }
+
     // Do NOT auto-issue chest number. Chest numbers are issued after registration is completed by the admin.
     const finalChestNo = chestNo ? chestNo.trim() : '';
 
@@ -118,6 +132,13 @@ export async function POST(request) {
     if (conn) {
       // Find event to get points config if position/grade provided
       const eventDoc = await Event.findOne({ name: event.trim() });
+      if (eventDoc && !isEventAvailableForCandidate(eventDoc, section.trim(), trimmedSex)) {
+        return NextResponse.json({
+          success: false,
+          message: `The event "${event}" is not available for a ${trimmedSex} candidate in section "${section}".`,
+        }, { status: 400 });
+      }
+
       const position = body.position || 'None';
       const grade = body.grade || 'None';
       const totalPoints = calculatePoints(eventDoc, position, grade);
@@ -143,6 +164,12 @@ export async function POST(request) {
 
     const store = getMemoryStore();
     const eventDoc = store.events.find(e => e.name === event.trim());
+    if (eventDoc && !isEventAvailableForCandidate(eventDoc, section.trim(), trimmedSex)) {
+      return NextResponse.json({
+        success: false,
+        message: `The event "${event}" is not available for a ${trimmedSex} candidate in section "${section}".`,
+      }, { status: 400 });
+    }
     const position = body.position || 'None';
     const grade = body.grade || 'None';
     const totalPoints = calculatePoints(eventDoc, position, grade);
@@ -181,6 +208,13 @@ export async function PUT(request) {
       return NextResponse.json({ success: false, message: 'Candidate ID is required' }, { status: 400 });
     }
 
+    if (fields.sex !== undefined) {
+      fields.sex = fields.sex.trim();
+      if (!['Male', 'Female'].includes(fields.sex)) {
+        return NextResponse.json({ success: false, message: 'Sex must be either Male or Female' }, { status: 400 });
+      }
+    }
+
     const conn = await connectToDatabase();
     if (conn) {
       const candidate = await Candidate.findById(id);
@@ -190,10 +224,19 @@ export async function PUT(request) {
 
       // If position, grade or event is updated, recalculate points
       const targetEventName = fields.event || candidate.event;
+      const targetSection = fields.section || candidate.section;
+      const targetSex = fields.sex || candidate.sex;
       const targetPosition = fields.position !== undefined ? fields.position : candidate.position;
       const targetGrade = fields.grade !== undefined ? fields.grade : candidate.grade;
 
       const eventDoc = await Event.findOne({ name: targetEventName });
+      if ((fields.event || fields.section || fields.sex) && eventDoc && !isEventAvailableForCandidate(eventDoc, targetSection, targetSex)) {
+        return NextResponse.json({
+          success: false,
+          message: `The event "${targetEventName}" is not available for a ${targetSex} candidate in section "${targetSection}".`,
+        }, { status: 400 });
+      }
+
       const totalPoints = calculatePoints(eventDoc, targetPosition, targetGrade);
 
       const updateData = {
@@ -213,10 +256,19 @@ export async function PUT(request) {
 
     const current = store.candidates[idx];
     const targetEventName = fields.event || current.event;
+    const targetSection = fields.section || current.section;
+    const targetSex = fields.sex || current.sex;
     const targetPosition = fields.position !== undefined ? fields.position : current.position;
     const targetGrade = fields.grade !== undefined ? fields.grade : current.grade;
 
     const eventDoc = store.events.find(e => e.name === targetEventName);
+    if ((fields.event || fields.section || fields.sex) && eventDoc && !isEventAvailableForCandidate(eventDoc, targetSection, targetSex)) {
+      return NextResponse.json({
+        success: false,
+        message: `The event "${targetEventName}" is not available for a ${targetSex} candidate in section "${targetSection}".`,
+      }, { status: 400 });
+    }
+
     const totalPoints = calculatePoints(eventDoc, targetPosition, targetGrade);
 
     store.candidates[idx] = {

@@ -1,6 +1,34 @@
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 
-const uri = "mongodb+srv://naveen:OXJ1IwYRujl6sXOL@cluster0.dnq0gk9.mongodb.net/CMLResult?retryWrites=true&w=majority";
+// Load environment variables from .env.local or .env if available
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envPath = path.resolve(process.cwd(), '.env');
+
+if (fs.existsSync(envLocalPath)) {
+  try {
+    process.loadEnvFile(envLocalPath);
+  } catch (e) {
+    // ignore if already loaded or not supported
+  }
+} else if (fs.existsSync(envPath)) {
+  try {
+    process.loadEnvFile(envPath);
+  } catch (e) {
+    // ignore
+  }
+}
+
+const uri = process.env.MONGODB_URI;
+
+if (!uri) {
+  console.error('Error: MONGODB_URI environment variable is not defined.');
+  console.error('Please configure MONGODB_URI in your .env.local file or environment.');
+  process.exit(1);
+}
+
+const dbName = process.env.MONGODB_DB || 'CMLResult';
 
 const newMekhalas = [
   { name: 'Adimali - Koompanpara', code: 'AK' },
@@ -18,8 +46,8 @@ const newMekhalas = [
 ];
 
 async function updateMekhalas() {
-  console.log('Connecting to MongoDB Atlas database: CMLResult...');
-  await mongoose.connect(uri, { dbName: 'CMLResult' });
+  console.log(`Connecting to MongoDB Atlas database: ${dbName}...`);
+  await mongoose.connect(uri, { dbName });
 
   const db = mongoose.connection.db;
   const mekhalaCollection = db.collection('mekhalas');

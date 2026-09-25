@@ -26,12 +26,24 @@ let memoryStore = {
     { _id: 's4', name: 'Aluva', mekhala: 'Central Zone', createdAt: new Date() },
     { _id: 's5', name: 'Trivandrum Central', mekhala: 'South Zone', createdAt: new Date() },
     { _id: 's6', name: 'Kollam City', mekhala: 'South Zone', createdAt: new Date() },
+    { _id: 's7', name: '1000 Acre', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's8', name: 'Kallarkutty', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's9', name: 'Sahayagiri', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's10', name: 'Adimali', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's11', name: 'Thokkupara', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's12', name: 'Machiplavu', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's13', name: 'Koompanpara', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's14', name: 'Munnar', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's15', name: 'Kuthupara', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
+    { _id: 's16', name: 'Irumbupalam', mekhala: 'Adimali - Koompanpara', createdAt: new Date() },
   ],
   events: [
     {
       _id: 'e1',
       name: 'Elocution (English)',
       category: 'Junior',
+      categories: ['Junior'],
+      gender: 'Both',
       description: 'Individual public speaking event',
       points: {
         first: 5,
@@ -48,6 +60,8 @@ let memoryStore = {
       _id: 'e2',
       name: 'Classical Music',
       category: 'Senior',
+      categories: ['Senior'],
+      gender: 'Both',
       description: 'Solo vocal competition',
       points: {
         first: 5,
@@ -63,7 +77,9 @@ let memoryStore = {
     {
       _id: 'e3',
       name: 'Quiz Competition',
-      category: 'General',
+      category: 'Sub-Junior, Junior, Senior, Super Senior, General',
+      categories: ['Sub-Junior', 'Junior', 'Senior', 'Super Senior', 'General'],
+      gender: 'Both',
       description: 'General knowledge & history',
       points: {
         first: 5,
@@ -80,6 +96,8 @@ let memoryStore = {
       _id: 'e4',
       name: 'Essay Writing',
       category: 'Sub-Junior',
+      categories: ['Sub-Junior'],
+      gender: 'Both',
       description: 'Creative and analytical writing',
       points: {
         first: 5,

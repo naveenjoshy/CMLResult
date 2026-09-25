@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { isEventAvailableForCandidate, formatEventCategories, formatEventGender } from '@/lib/eventUtils';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -47,8 +48,9 @@ export default function RegisterPage() {
         if (dataE.success) {
           const evList = dataE.data || [];
           setEvents(evList);
-          if (evList.length > 0) {
-            setFormData(prev => ({ ...prev, event: evList[0].name }));
+          const validInitial = evList.filter(ev => isEventAvailableForCandidate(ev, 'Junior', 'Male'));
+          if (validInitial.length > 0) {
+            setFormData(prev => ({ ...prev, event: validInitial[0].name }));
           }
         }
       } catch (err) {
@@ -65,6 +67,9 @@ export default function RegisterPage() {
     ? sakhas.filter(s => s.mekhala.toLowerCase() === formData.mekhala.toLowerCase())
     : sakhas;
 
+  // Filter Events based on selected Section and Sex
+  const availableEvents = events.filter(ev => isEventAvailableForCandidate(ev, formData.section, formData.sex));
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'mekhala') {
@@ -72,6 +77,16 @@ export default function RegisterPage() {
         ...prev,
         mekhala: value,
         sakha: '', // Reset sakha when mekhala changes
+      }));
+    } else if (name === 'section' || name === 'sex') {
+      const newSec = name === 'section' ? value : formData.section;
+      const newSex = name === 'sex' ? value : formData.sex;
+      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, newSec, newSex));
+      const currentValid = validForNew.some(ev => ev.name === formData.event);
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        event: currentValid ? prev.event : (validForNew[0]?.name || ''),
       }));
     } else {
       setFormData(prev => ({
@@ -123,6 +138,7 @@ export default function RegisterPage() {
         setRegisteredCandidate(result.data);
         setStatusMessage({ type: 'success', text: 'Candidate successfully registered!' });
         // Reset form
+        const validForJuniorMale = events.filter(ev => isEventAvailableForCandidate(ev, 'Junior', 'Male'));
         setFormData({
           name: '',
           houseName: '',
@@ -132,7 +148,7 @@ export default function RegisterPage() {
           sakha: '',
           section: 'Junior',
           sex: 'Male',
-          event: events[0]?.name || '',
+          event: validForJuniorMale[0]?.name || '',
         });
       } else {
         if (result.isClosed) {
@@ -381,7 +397,6 @@ export default function RegisterPage() {
                 >
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
-                  <option value="Other">Other</option>
                 </select>
               </div>
 
@@ -457,6 +472,9 @@ export default function RegisterPage() {
               <div className="form-group full-width">
                 <label className="form-label" htmlFor="event">
                   Event <span className="req">*</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                    ({availableEvents.length} available for {formData.section} • {formData.sex})
+                  </span>
                 </label>
                 <select
                   id="event"
@@ -465,14 +483,28 @@ export default function RegisterPage() {
                   value={formData.event}
                   onChange={handleChange}
                   required
+                  disabled={availableEvents.length === 0}
                 >
-                  <option value="">-- Select Event --</option>
-                  {events.map(ev => (
-                    <option key={ev._id || ev.name} value={ev.name}>
-                      {ev.name} ({ev.category || 'General'})
-                    </option>
-                  ))}
+                  <option value="">
+                    {availableEvents.length > 0
+                      ? `-- Select Event (${availableEvents.length} available for ${formData.section} • ${formData.sex}) --`
+                      : `-- No events available for ${formData.section} • ${formData.sex} --`}
+                  </option>
+                  {availableEvents.map(ev => {
+                    const catDisplay = formatEventCategories(ev);
+                    const genderDisplay = formatEventGender(ev);
+                    return (
+                      <option key={ev._id || ev.name} value={ev.name}>
+                        {ev.name} ({catDisplay} • {genderDisplay})
+                      </option>
+                    );
+                  })}
                 </select>
+                {availableEvents.length === 0 && (
+                  <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.35rem' }}>
+                    ⚠️ No events are currently configured for <strong>{formData.section} ({formData.sex})</strong>. Please select another section or contact the administrator.
+                  </p>
+                )}
               </div>
             </div>
 

@@ -2,12 +2,41 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import {
+  SECTION_OPTIONS,
+  GENDER_OPTIONS,
+  isEventAvailableForSection,
+  isEventAvailableForGender,
+  isEventAvailableForCandidate,
+  formatEventCategories,
+  formatEventGender,
+  getEventCategories,
+  getSectionEventName,
+} from '@/lib/eventUtils';
+import PrintSheetModal from '@/components/PrintSheetModal';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   const [activeAdminTab, setActiveAdminTab] = useState('results'); // 'results', 'events', 'candidates', 'mekhala', 'sakha', 'db'
+
+  // Print modal state
+  const [printModalState, setPrintModalState] = useState({
+    isOpen: false,
+    type: 'stage', // 'stage' or 'result'
+    event: null,
+    candidates: [],
+  });
+
+  const openPrintModal = (type, eventObj, eventCandidates) => {
+    setPrintModalState({
+      isOpen: true,
+      type,
+      event: eventObj,
+      candidates: eventCandidates || [],
+    });
+  };
 
   // Data states
   const [events, setEvents] = useState([]);
@@ -24,11 +53,17 @@ export default function AdminPage() {
   // Event form state
   const [newEvent, setNewEvent] = useState({
     name: '',
+    categories: ['Junior'],
     category: 'Junior',
+    gender: 'Both',
     description: '',
     points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
     status: 'Upcoming',
+    separateEvents: true,
   });
+
+  // Event editing state
+  const [editingEvent, setEditingEvent] = useState(null);
 
   // Mekhala & Sakha form states
   const [newMekhala, setNewMekhala] = useState({ name: '', code: '' });
@@ -39,6 +74,9 @@ export default function AdminPage() {
 
   // Candidate search/filter
   const [candidateSearch, setCandidateSearch] = useState('');
+  const [mekhalaSearch, setMekhalaSearch] = useState('');
+  const [sakhaSearch, setSakhaSearch] = useState('');
+  const [sakhaMekhalaFilter, setSakhaMekhalaFilter] = useState('ALL');
 
   // Check login from sessionStorage on mount
   useEffect(() => {
@@ -172,29 +210,90 @@ export default function AdminPage() {
       notify('error', 'Event name is required');
       return;
     }
+    const cats = newEvent.categories || [];
+    if (cats.length === 0) {
+      notify('error', 'Please select at least one Category/Section');
+      return;
+    }
 
     try {
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newEvent),
+        body: JSON.stringify({
+          ...newEvent,
+          categories: cats,
+          category: cats.join(', '),
+          gender: newEvent.gender || 'Both',
+          separateEvents: newEvent.separateEvents !== false,
+        }),
       });
       const json = await res.json();
       if (json.success) {
-        setEvents(prev => [json.data, ...prev]);
-        notify('success', `Event "${newEvent.name}" created successfully!`);
+        const addedList = Array.isArray(json.data) ? json.data : [json.data];
+        setEvents(prev => [...addedList, ...prev]);
+        notify(
+          'success',
+          addedList.length > 1
+            ? `Successfully created ${addedList.length} events for ${cats.join(', ')}!`
+            : `Event "${addedList[0]?.name || newEvent.name}" created successfully!`
+        );
         setNewEvent({
           name: '',
+          categories: ['Junior'],
           category: 'Junior',
+          gender: 'Both',
           description: '',
           points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
           status: 'Upcoming',
+          separateEvents: true,
         });
       } else {
         notify('error', json.message || 'Failed to create event');
       }
     } catch (err) {
       notify('error', 'Failed to create event');
+    }
+  };
+
+  const handleUpdateEvent = async (e) => {
+    e.preventDefault();
+    if (!editingEvent) return;
+    if (!editingEvent.name.trim()) {
+      notify('error', 'Event name is required');
+      return;
+    }
+    const cats = editingEvent.categories || [];
+    if (cats.length === 0) {
+      notify('error', 'Please select at least one Category/Section');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/events', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingEvent._id,
+          name: editingEvent.name,
+          categories: cats,
+          category: cats.join(', '),
+          gender: editingEvent.gender || 'Both',
+          description: editingEvent.description,
+          points: editingEvent.points,
+          status: editingEvent.status,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setEvents(prev => prev.map(ev => ev._id === editingEvent._id ? json.data : ev));
+        notify('success', `Event "${editingEvent.name}" updated successfully!`);
+        setEditingEvent(null);
+      } else {
+        notify('error', json.message || 'Failed to update event');
+      }
+    } catch (err) {
+      notify('error', 'Failed to update event');
     }
   };
 
@@ -399,6 +498,7 @@ export default function AdminPage() {
         setCandidates(prev => [json.data, ...prev]);
         notify('success', `Candidate "${adminCandidateForm.name}" registered successfully!`);
         setShowAdminAddCandidateModal(false);
+        const validForJunior = events.filter(ev => isEventAvailableForCandidate(ev, 'Junior', 'Male'));
         setAdminCandidateForm({
           name: '',
           houseName: '',
@@ -408,7 +508,7 @@ export default function AdminPage() {
           sakha: '',
           section: 'Junior',
           sex: 'Male',
-          event: events[0]?.name || '',
+          event: validForJunior[0]?.name || '',
           chestNo: '',
         });
       } else {
@@ -503,6 +603,28 @@ export default function AdminPage() {
       c.event.toLowerCase().includes(q) ||
       c.mekhala.toLowerCase().includes(q) ||
       c.sakha.toLowerCase().includes(q)
+    );
+  });
+
+  // Filtered Mekhalas for Mekhala management tab
+  const filteredMekhalas = mekhalas.filter(m => {
+    if (!mekhalaSearch.trim()) return true;
+    const q = mekhalaSearch.toLowerCase();
+    return (
+      m.name.toLowerCase().includes(q) ||
+      (m.code && m.code.toLowerCase().includes(q))
+    );
+  });
+
+  // Filtered Sakhas for Sakha management tab
+  const filteredSakhas = sakhas.filter(s => {
+    const matchesMekhala = sakhaMekhalaFilter === 'ALL' || s.mekhala === sakhaMekhalaFilter;
+    if (!matchesMekhala) return false;
+    if (!sakhaSearch.trim()) return true;
+    const q = sakhaSearch.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      (s.mekhala && s.mekhala.toLowerCase().includes(q))
     );
   });
 
@@ -601,10 +723,10 @@ export default function AdminPage() {
                 </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <select
                   className="form-select"
-                  style={{ minWidth: '240px' }}
+                  style={{ minWidth: '220px' }}
                   value={selectedEventName}
                   onChange={(e) => setSelectedEventName(e.target.value)}
                 >
@@ -626,6 +748,29 @@ export default function AdminPage() {
                     <option value="In Progress">Status: In Progress</option>
                     <option value="Completed">Status: Completed</option>
                   </select>
+                )}
+
+                {selectedEvent && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                      onClick={() => openPrintModal('stage', selectedEvent, candidatesForSelectedEvent)}
+                      title="Print candidate call sheet for Stage Managers"
+                    >
+                      📋 Stage Sheet
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                      onClick={() => openPrintModal('result', selectedEvent, candidatesForSelectedEvent)}
+                      title="Print official result sheet for this event"
+                    >
+                      🏆 Result Sheet
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -747,19 +892,181 @@ export default function AdminPage() {
                 />
               </div>
 
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label">Category / Section</label>
-                <select
-                  className="form-select"
-                  value={newEvent.category}
-                  onChange={(e) => setNewEvent({ ...newEvent, category: e.target.value })}
-                >
-                  <option value="Sub-Junior">Sub-Junior</option>
-                  <option value="Junior">Junior</option>
-                  <option value="Senior">Senior</option>
-                  <option value="Super Senior">Super Senior</option>
-                  <option value="General">General</option>
-                </select>
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>
+                    Categories / Sections * <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({newEvent.categories?.length || 0} selected)</span>
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
+                      onClick={() => setNewEvent(prev => ({
+                        ...prev,
+                        categories: [...SECTION_OPTIONS],
+                        category: SECTION_OPTIONS.join(', ')
+                      }))}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
+                      onClick={() => setNewEvent(prev => ({
+                        ...prev,
+                        categories: [],
+                        category: ''
+                      }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '0.5rem',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: (newEvent.categories?.length === 0) ? '1px dashed #ef4444' : '1px solid rgba(255, 255, 255, 0.1)',
+                }}>
+                  {SECTION_OPTIONS.map((sec) => {
+                    const isSelected = newEvent.categories?.includes(sec);
+                    return (
+                      <label
+                        key={sec}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.45rem 0.65rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: isSelected ? '600' : '400',
+                          background: isSelected ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))' : 'rgba(255, 255, 255, 0.02)',
+                          border: isSelected ? '1px solid rgba(129, 140, 248, 0.6)' : '1px solid rgba(255, 255, 255, 0.05)',
+                          color: isSelected ? '#fff' : 'var(--text-muted)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!isSelected}
+                          onChange={() => {
+                            const current = newEvent.categories || [];
+                            const updated = isSelected
+                              ? current.filter(c => c !== sec)
+                              : [...current, sec];
+                            setNewEvent({
+                              ...newEvent,
+                              categories: updated,
+                              category: updated.join(', ')
+                            });
+                          }}
+                          style={{
+                            accentColor: 'var(--brand-color, #6366f1)',
+                            cursor: 'pointer',
+                            width: '16px',
+                            height: '16px'
+                          }}
+                        />
+                        <span>{sec}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {newEvent.categories?.length > 1 && (
+                  <div style={{
+                    marginTop: '0.75rem',
+                    padding: '0.85rem 1rem',
+                    borderRadius: '10px',
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: '600', color: '#c7d2fe' }}>
+                        ⚡ Multiple Sections Selected ({newEvent.categories.length})
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${newEvent.separateEvents !== false ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                          onClick={() => setNewEvent({ ...newEvent, separateEvents: true })}
+                        >
+                          ✓ Add to each Section ({newEvent.categories.length} events)
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${newEvent.separateEvents === false ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                          onClick={() => setNewEvent({ ...newEvent, separateEvents: false })}
+                        >
+                          Single Combined Event
+                        </button>
+                      </div>
+                    </div>
+                    {newEvent.separateEvents !== false ? (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        Will create {newEvent.categories.length} separate events:{' '}
+                        <span style={{ color: '#fff', fontWeight: '500' }}>
+                          {newEvent.categories.map(sec => getSectionEventName(newEvent.name || 'Event', sec)).join(', ')}
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        All selected sections ({newEvent.categories.join(', ')}) will compete together in one combined event.
+                      </div>
+                    )}
+                  </div>
+                )}
+                {newEvent.categories?.length === 0 && (
+                  <span style={{ fontSize: '0.78rem', color: '#ef4444', marginTop: '0.35rem', display: 'block' }}>
+                    ⚠️ Please select at least one Category/Section.
+                  </span>
+                )}
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label" style={{ marginBottom: '0.4rem' }}>
+                  Candidate Gender Eligibility *
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {GENDER_OPTIONS.map((opt) => {
+                    const isSelected = (newEvent.gender || 'Both') === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNewEvent({ ...newEvent, gender: opt.value })}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.45rem 0.85rem',
+                          borderRadius: '8px',
+                          fontSize: '0.85rem',
+                          fontWeight: isSelected ? '600' : '400',
+                          cursor: 'pointer',
+                          background: isSelected
+                            ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35))'
+                            : 'rgba(255, 255, 255, 0.03)',
+                          border: isSelected ? '1px solid rgba(129, 140, 248, 0.7)' : '1px solid rgba(255, 255, 255, 0.08)',
+                          color: isSelected ? '#fff' : 'var(--text-muted)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="form-group" style={{ marginBottom: '1rem' }}>
@@ -870,7 +1177,9 @@ export default function AdminPage() {
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                ➕ Create Event
+                {newEvent.categories?.length > 1 && newEvent.separateEvents !== false
+                  ? `➕ Create ${newEvent.categories.length} Events (One per Section)`
+                  : '➕ Create Event'}
               </button>
             </form>
           </div>
@@ -881,7 +1190,8 @@ export default function AdminPage() {
               <thead>
                 <tr>
                   <th>Event Name</th>
-                  <th>Category</th>
+                  <th>Categories / Sections</th>
+                  <th>Gender</th>
                   <th>Position Pts (1/2/3)</th>
                   <th>Grade Pts (A/B/C)</th>
                   <th>Status</th>
@@ -895,7 +1205,16 @@ export default function AdminPage() {
                       <strong style={{ color: '#fff' }}>{ev.name}</strong>
                     </td>
                     <td>
-                      <span className="event-category-badge">{ev.category || 'General'}</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                        {getEventCategories(ev).map((cat, idx) => (
+                          <span key={idx} className="event-category-badge">{cat}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`gender-badge ${(ev.gender || 'Both').toLowerCase()}`}>
+                        {formatEventGender(ev)}
+                      </span>
                     </td>
                     <td>
                       {ev.points?.first ?? 5} / {ev.points?.second ?? 3} / {ev.points?.third ?? 1}
@@ -911,13 +1230,44 @@ export default function AdminPage() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDeleteEvent(ev._id, ev.name)}
-                      >
-                        🗑️ Delete
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Print candidate call sheet for Stage Managers"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+                          onClick={() => openPrintModal('stage', ev, candidates.filter(c => c.event === ev.name))}
+                        >
+                          📋 Stage
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Print official result sheet"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+                          onClick={() => openPrintModal('result', ev, candidates.filter(c => c.event === ev.name))}
+                        >
+                          🏆 Result
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setEditingEvent({
+                            ...ev,
+                            gender: ev.gender || 'Both',
+                            categories: getEventCategories(ev),
+                          })}
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDeleteEvent(ev._id, ev.name)}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -954,6 +1304,7 @@ export default function AdminPage() {
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={() => {
+                  const initialValid = events.filter(ev => isEventAvailableForCandidate(ev, 'Junior', 'Male'));
                   setAdminCandidateForm({
                     name: '',
                     houseName: '',
@@ -963,7 +1314,7 @@ export default function AdminPage() {
                     sakha: '',
                     section: 'Junior',
                     sex: 'Male',
-                    event: events[0]?.name || '',
+                    event: initialValid[0]?.name || '',
                     chestNo: '',
                   });
                   setShowAdminAddCandidateModal(true);
@@ -1098,38 +1449,70 @@ export default function AdminPage() {
             </form>
           </div>
 
-          <div className="table-wrapper">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th>Mekhala Name</th>
-                  <th>Short Code</th>
-                  <th>Registered Candidates</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mekhalas.map(m => {
-                  const count = candidates.filter(c => c.mekhala === m.name).length;
-                  return (
-                    <tr key={m._id || m.name}>
-                      <td><strong style={{ color: '#fff' }}>{m.name}</strong></td>
-                      <td>{m.code || '—'}</td>
-                      <td>{count}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDeleteMekhala(m._id, m.name)}
-                        >
-                          🗑️ Delete
-                        </button>
+          <div>
+            <div className="filter-bar" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div className="search-box" style={{ flex: 1 }}>
+                <span className="search-icon">🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search mekhala by name or short code..."
+                  className="form-input"
+                  value={mekhalaSearch}
+                  onChange={(e) => setMekhalaSearch(e.target.value)}
+                />
+              </div>
+              {mekhalaSearch && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setMekhalaSearch('')}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="table-wrapper">
+              <table className="custom-table">
+                <thead>
+                  <tr>
+                    <th>Mekhala Name</th>
+                    <th>Short Code</th>
+                    <th>Registered Candidates</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMekhalas.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        No mekhalas match your search "{mekhalaSearch}".
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredMekhalas.map(m => {
+                      const count = candidates.filter(c => c.mekhala === m.name).length;
+                      return (
+                        <tr key={m._id || m.name}>
+                          <td><strong style={{ color: '#fff' }}>{m.name}</strong></td>
+                          <td>{m.code || '—'}</td>
+                          <td>{count}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => handleDeleteMekhala(m._id, m.name)}
+                            >
+                              🗑️ Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1175,47 +1558,293 @@ export default function AdminPage() {
             </form>
           </div>
 
-          <div className="table-wrapper">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th>Sakha Name</th>
-                  <th>Parent Mekhala</th>
-                  <th>Registered Candidates</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sakhas.map(s => {
-                  const count = candidates.filter(c => c.sakha === s.name).length;
-                  return (
-                    <tr key={s._id || s.name}>
-                      <td><strong style={{ color: '#fff' }}>{s.name}</strong></td>
-                      <td>
-                        <span style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          fontSize: '0.85rem'
-                        }}>
-                          {s.mekhala}
-                        </span>
-                      </td>
-                      <td>{count}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDeleteSakha(s._id, s.name)}
-                        >
-                          🗑️ Delete
-                        </button>
+          <div>
+            <div className="filter-bar" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div className="search-box" style={{ flex: 1, minWidth: '220px' }}>
+                <span className="search-icon">🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search sakha by name or parent mekhala..."
+                  className="form-input"
+                  value={sakhaSearch}
+                  onChange={(e) => setSakhaSearch(e.target.value)}
+                />
+              </div>
+              <select
+                className="form-select"
+                style={{ width: 'auto', minWidth: '180px' }}
+                value={sakhaMekhalaFilter}
+                onChange={(e) => setSakhaMekhalaFilter(e.target.value)}
+              >
+                <option value="ALL">All Mekhalas</option>
+                {mekhalas.map(m => (
+                  <option key={m._id || m.name} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+              {(sakhaSearch || sakhaMekhalaFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setSakhaSearch('');
+                    setSakhaMekhalaFilter('ALL');
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="table-wrapper">
+              <table className="custom-table">
+                <thead>
+                  <tr>
+                    <th>Sakha Name</th>
+                    <th>Parent Mekhala</th>
+                    <th>Registered Candidates</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSakhas.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        No sakhas match your search filters.
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredSakhas.map(s => {
+                      const count = candidates.filter(c => c.sakha === s.name).length;
+                      return (
+                        <tr key={s._id || s.name}>
+                          <td><strong style={{ color: '#fff' }}>{s.name}</strong></td>
+                          <td>
+                            <span style={{
+                              padding: '0.2rem 0.5rem',
+                              borderRadius: 'var(--radius-sm)',
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              fontSize: '0.85rem'
+                            }}>
+                              {s.mekhala}
+                            </span>
+                          </td>
+                          <td>{count}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => handleDeleteSakha(s._id, s.name)}
+                            >
+                              🗑️ Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EVENT MODAL */}
+      {editingEvent && (
+        <div className="modal-overlay" onClick={() => setEditingEvent(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Edit Event: {editingEvent.name}</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setEditingEvent(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateEvent}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Event Name *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingEvent.name}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>
+                    Categories / Sections * <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({editingEvent.categories?.length || 0} selected)</span>
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
+                      onClick={() => setEditingEvent(prev => ({
+                        ...prev,
+                        categories: [...SECTION_OPTIONS],
+                      }))}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      style={{ padding: '0.2rem 0.55rem', fontSize: '0.75rem' }}
+                      onClick={() => setEditingEvent(prev => ({
+                        ...prev,
+                        categories: [],
+                      }))}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '0.5rem',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: (!editingEvent.categories || editingEvent.categories.length === 0) ? '1px dashed #ef4444' : '1px solid rgba(255, 255, 255, 0.1)',
+                }}>
+                  {SECTION_OPTIONS.map((sec) => {
+                    const isSelected = editingEvent.categories?.includes(sec);
+                    return (
+                      <label
+                        key={sec}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.45rem 0.65rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: isSelected ? '600' : '400',
+                          background: isSelected ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25))' : 'rgba(255, 255, 255, 0.02)',
+                          border: isSelected ? '1px solid rgba(129, 140, 248, 0.6)' : '1px solid rgba(255, 255, 255, 0.05)',
+                          color: isSelected ? '#fff' : 'var(--text-muted)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!isSelected}
+                          onChange={() => {
+                            const current = editingEvent.categories || [];
+                            const updated = isSelected
+                              ? current.filter(c => c !== sec)
+                              : [...current, sec];
+                            setEditingEvent({
+                              ...editingEvent,
+                              categories: updated,
+                            });
+                          }}
+                          style={{
+                            accentColor: 'var(--brand-color, #6366f1)',
+                            cursor: 'pointer',
+                            width: '16px',
+                            height: '16px'
+                          }}
+                        />
+                        <span>{sec}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {(!editingEvent.categories || editingEvent.categories.length === 0) && (
+                  <span style={{ fontSize: '0.78rem', color: '#ef4444', marginTop: '0.35rem', display: 'block' }}>
+                    ⚠️ Please select at least one Category/Section.
+                  </span>
+                )}
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label" style={{ marginBottom: '0.4rem' }}>
+                  Candidate Gender Eligibility *
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {GENDER_OPTIONS.map((opt) => {
+                    const isSelected = (editingEvent.gender || 'Both') === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setEditingEvent({ ...editingEvent, gender: opt.value })}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.45rem 0.85rem',
+                          borderRadius: '8px',
+                          fontSize: '0.85rem',
+                          fontWeight: isSelected ? '600' : '400',
+                          cursor: 'pointer',
+                          background: isSelected
+                            ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35))'
+                            : 'rgba(255, 255, 255, 0.03)',
+                          border: isSelected ? '1px solid rgba(129, 140, 248, 0.7)' : '1px solid rgba(255, 255, 255, 0.08)',
+                          color: isSelected ? '#fff' : 'var(--text-muted)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Status</label>
+                <select
+                  className="form-select"
+                  value={editingEvent.status || 'Upcoming'}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, status: e.target.value })}
+                >
+                  <option value="Upcoming">Upcoming</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Description (Optional)</label>
+                <textarea
+                  className="form-textarea"
+                  rows="2"
+                  value={editingEvent.description || ''}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, description: e.target.value })}
+                />
+              </div>
+
+              <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditingEvent(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={!editingEvent.categories || editingEvent.categories.length === 0}
+                >
+                  💾 Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1300,12 +1929,20 @@ export default function AdminPage() {
                   <select
                     className="form-select"
                     value={editingCandidate.sex}
-                    onChange={(e) => setEditingCandidate({ ...editingCandidate, sex: e.target.value })}
+                    onChange={(e) => {
+                      const newSex = e.target.value;
+                      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, editingCandidate.section, newSex));
+                      const isStillValid = validForNew.some(ev => ev.name === editingCandidate.event);
+                      setEditingCandidate({
+                        ...editingCandidate,
+                        sex: newSex,
+                        event: isStillValid ? editingCandidate.event : (validForNew[0]?.name || '')
+                      });
+                    }}
                     required
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
-                    <option value="Other">Other</option>
                   </select>
                 </div>
 
@@ -1342,7 +1979,16 @@ export default function AdminPage() {
                   <select
                     className="form-select"
                     value={editingCandidate.section}
-                    onChange={(e) => setEditingCandidate({ ...editingCandidate, section: e.target.value })}
+                    onChange={(e) => {
+                      const newSec = e.target.value;
+                      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, newSec, editingCandidate.sex));
+                      const isStillValid = validForNew.some(ev => ev.name === editingCandidate.event);
+                      setEditingCandidate({
+                        ...editingCandidate,
+                        section: newSec,
+                        event: isStillValid ? editingCandidate.event : (validForNew[0]?.name || '')
+                      });
+                    }}
                     required
                   >
                     <option value="Sub-Junior">Sub-Junior</option>
@@ -1354,16 +2000,26 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Event *</label>
+                  <label className="form-label">
+                    Event *
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                      ({events.filter(ev => isEventAvailableForCandidate(ev, editingCandidate.section, editingCandidate.sex)).length} available for {editingCandidate.section} / {editingCandidate.sex})
+                    </span>
+                  </label>
                   <select
                     className="form-select"
                     value={editingCandidate.event}
                     onChange={(e) => setEditingCandidate({ ...editingCandidate, event: e.target.value })}
                     required
                   >
-                    {events.map(ev => (
-                      <option key={ev._id || ev.name} value={ev.name}>{ev.name}</option>
-                    ))}
+                    <option value="">-- Select Event --</option>
+                    {events
+                      .filter(ev => isEventAvailableForCandidate(ev, editingCandidate.section, editingCandidate.sex))
+                      .map(ev => (
+                        <option key={ev._id || ev.name} value={ev.name}>
+                          {ev.name} ({formatEventCategories(ev)} • {formatEventGender(ev)})
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -1473,12 +2129,20 @@ export default function AdminPage() {
                   <select
                     className="form-select"
                     value={adminCandidateForm.sex}
-                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, sex: e.target.value })}
+                    onChange={(e) => {
+                      const newSex = e.target.value;
+                      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, adminCandidateForm.section, newSex));
+                      const isStillValid = validForNew.some(ev => ev.name === adminCandidateForm.event);
+                      setAdminCandidateForm({
+                        ...adminCandidateForm,
+                        sex: newSex,
+                        event: isStillValid ? adminCandidateForm.event : (validForNew[0]?.name || '')
+                      });
+                    }}
                     required
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
-                    <option value="Other">Other</option>
                   </select>
                 </div>
 
@@ -1519,7 +2183,16 @@ export default function AdminPage() {
                   <select
                     className="form-select"
                     value={adminCandidateForm.section}
-                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, section: e.target.value })}
+                    onChange={(e) => {
+                      const newSec = e.target.value;
+                      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, newSec, adminCandidateForm.sex));
+                      const isStillValid = validForNew.some(ev => ev.name === adminCandidateForm.event);
+                      setAdminCandidateForm({
+                        ...adminCandidateForm,
+                        section: newSec,
+                        event: isStillValid ? adminCandidateForm.event : (validForNew[0]?.name || '')
+                      });
+                    }}
                     required
                   >
                     <option value="Sub-Junior">Sub-Junior</option>
@@ -1531,7 +2204,12 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Event *</label>
+                  <label className="form-label">
+                    Event *
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                      ({events.filter(ev => isEventAvailableForCandidate(ev, adminCandidateForm.section, adminCandidateForm.sex)).length} available for {adminCandidateForm.section} / {adminCandidateForm.sex})
+                    </span>
+                  </label>
                   <select
                     className="form-select"
                     value={adminCandidateForm.event}
@@ -1539,9 +2217,13 @@ export default function AdminPage() {
                     required
                   >
                     <option value="">-- Select Event --</option>
-                    {events.map(ev => (
-                      <option key={ev._id || ev.name} value={ev.name}>{ev.name}</option>
-                    ))}
+                    {events
+                      .filter(ev => isEventAvailableForCandidate(ev, adminCandidateForm.section, adminCandidateForm.sex))
+                      .map(ev => (
+                        <option key={ev._id || ev.name} value={ev.name}>
+                          {ev.name} ({formatEventCategories(ev)} • {formatEventGender(ev)})
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -1565,6 +2247,15 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Print Sheet Modal (for Stage Managers and Official Results) */}
+      <PrintSheetModal
+        isOpen={printModalState.isOpen}
+        onClose={() => setPrintModalState(prev => ({ ...prev, isOpen: false }))}
+        initialType={printModalState.type}
+        event={printModalState.event}
+        candidates={printModalState.candidates}
+      />
     </div>
   );
 }

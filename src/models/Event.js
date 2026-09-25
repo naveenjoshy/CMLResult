@@ -11,6 +11,16 @@ const EventSchema = new mongoose.Schema({
     default: 'General',
     trim: true,
   },
+  categories: {
+    type: [String],
+    default: ['General'],
+  },
+  gender: {
+    type: String,
+    enum: ['Both', 'Male', 'Female', 'Combined'],
+    default: 'Both',
+    trim: true,
+  },
   description: {
     type: String,
     trim: true,
@@ -34,4 +44,8 @@ const EventSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.models.Event || mongoose.model('Event', EventSchema);
+if (mongoose.models && mongoose.models.Event) {
+  delete mongoose.models.Event;
+}
+
+export default mongoose.model('Event', EventSchema);

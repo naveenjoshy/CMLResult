@@ -41,7 +41,7 @@ const CandidateSchema = new mongoose.Schema({
   sex: {
     type: String,
     required: [true, 'Sex is required'],
-    enum: ['Male', 'Female', 'Other'],
+    enum: ['Male', 'Female'],
   },
   event: {
     type: String,
@@ -68,4 +68,8 @@ const CandidateSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.models.Candidate || mongoose.model('Candidate', CandidateSchema);
+if (mongoose.models && mongoose.models.Candidate) {
+  delete mongoose.models.Candidate;
+}
+
+export default mongoose.model('Candidate', CandidateSchema);

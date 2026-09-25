@@ -1,11 +1,39 @@
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 
-const uri = "mongodb+srv://naveen:OXJ1IwYRujl6sXOL@cluster0.dnq0gk9.mongodb.net/CMLResult?retryWrites=true&w=majority";
+// Load environment variables from .env.local or .env if available
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envPath = path.resolve(process.cwd(), '.env');
+
+if (fs.existsSync(envLocalPath)) {
+  try {
+    process.loadEnvFile(envLocalPath);
+  } catch (e) {
+    // ignore if already loaded or not supported
+  }
+} else if (fs.existsSync(envPath)) {
+  try {
+    process.loadEnvFile(envPath);
+  } catch (e) {
+    // ignore
+  }
+}
+
+const uri = process.env.MONGODB_URI;
+
+if (!uri) {
+  console.error('Error: MONGODB_URI environment variable is not defined.');
+  console.error('Please configure MONGODB_URI in your .env.local file or environment.');
+  process.exit(1);
+}
+
+const dbName = process.env.MONGODB_DB || 'CMLResult';
 
 async function main() {
   console.log('Connecting to MongoDB Atlas cluster...');
-  await mongoose.connect(uri, { dbName: 'CMLResult' });
-  console.log('Connected successfully to database: CMLResult');
+  await mongoose.connect(uri, { dbName });
+  console.log(`Connected successfully to database: ${dbName}`);
 
   const db = mongoose.connection.db;
 
@@ -37,6 +65,7 @@ async function main() {
   const Event = mongoose.model('Event', new mongoose.Schema({
     name: String,
     category: String,
+    categories: [String],
     description: String,
     points: {
       first: Number,
@@ -98,6 +127,16 @@ async function main() {
       { name: 'Kollam City', mekhala: 'South Zone' },
       { name: 'Feroke', mekhala: 'Kozhikode South' },
       { name: 'Manjeri', mekhala: 'Malappuram East' },
+      { name: '1000 Acre', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Kallarkutty', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Sahayagiri', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Adimali', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Thokkupara', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Machiplavu', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Koompanpara', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Munnar', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Kuthupara', mekhala: 'Adimali - Koompanpara' },
+      { name: 'Irumbupalam', mekhala: 'Adimali - Koompanpara' },
     ]);
   }
 
@@ -108,6 +147,8 @@ async function main() {
       {
         name: 'Elocution (English)',
         category: 'Junior',
+        categories: ['Junior'],
+        gender: 'Both',
         description: 'Individual public speaking event',
         points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
         status: 'Completed',
@@ -115,13 +156,17 @@ async function main() {
       {
         name: 'Classical Music',
         category: 'Senior',
+        categories: ['Senior'],
+        gender: 'Both',
         description: 'Solo vocal performance',
         points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
         status: 'Completed',
       },
       {
         name: 'Quiz Competition',
-        category: 'General',
+        category: 'Sub-Junior, Junior, Senior, Super Senior, General',
+        categories: ['Sub-Junior', 'Junior', 'Senior', 'Super Senior', 'General'],
+        gender: 'Both',
         description: 'General knowledge & history',
         points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
         status: 'In Progress',
@@ -129,6 +174,8 @@ async function main() {
       {
         name: 'Essay Writing',
         category: 'Sub-Junior',
+        categories: ['Sub-Junior'],
+        gender: 'Both',
         description: 'Creative and analytical writing',
         points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
         status: 'Upcoming',

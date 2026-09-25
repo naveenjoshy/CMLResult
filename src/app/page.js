@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { getEventCategories } from '@/lib/eventUtils';
+import PrintSheetModal from '@/components/PrintSheetModal';
 
 export default function DashboardPage() {
   const [data, setData] = useState(null);
@@ -10,7 +12,27 @@ export default function DashboardPage() {
   const [selectedEventFilter, setSelectedEventFilter] = useState('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [mekhalaSearch, setMekhalaSearch] = useState('');
+  const [sakhaSearch, setSakhaSearch] = useState('');
+  const [sakhaMekhalaFilter, setSakhaMekhalaFilter] = useState('ALL');
   const [refreshing, setRefreshing] = useState(false);
+
+  // Print modal state
+  const [printModalState, setPrintModalState] = useState({
+    isOpen: false,
+    type: 'result', // default to official result sheet on public portal
+    event: null,
+    candidates: [],
+  });
+
+  const openPrintModal = (type, eventObj, eventCandidates) => {
+    setPrintModalState({
+      isOpen: true,
+      type,
+      event: eventObj,
+      candidates: eventCandidates || [],
+    });
+  };
 
   async function loadResults() {
     try {
@@ -51,15 +73,35 @@ export default function DashboardPage() {
   // Filter events
   const filteredEvents = events.filter(ev => {
     const matchesEvent = selectedEventFilter === 'ALL' || ev.name === selectedEventFilter;
-    const matchesCategory = selectedCategoryFilter === 'ALL' || ev.category === selectedCategoryFilter;
+    const evCats = getEventCategories(ev);
+    const matchesCategory = selectedCategoryFilter === 'ALL' || evCats.includes(selectedCategoryFilter) || ev.category === selectedCategoryFilter;
     const matchesSearch = !searchQuery || 
       ev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ev.candidates?.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || (c.chestNo && c.chestNo.toLowerCase().includes(searchQuery.toLowerCase())));
     return matchesEvent && matchesCategory && matchesSearch;
   });
 
-  // Extract all categories
-  const categories = Array.from(new Set(events.map(e => e.category || 'General')));
+  // Filter Mekhalas
+  const filteredTopMekhalas = topMekhalas.filter(m => {
+    if (!mekhalaSearch.trim()) return true;
+    const q = mekhalaSearch.toLowerCase();
+    return m.name.toLowerCase().includes(q) || (m.code && m.code.toLowerCase().includes(q));
+  });
+
+  // Unique Mekhalas for Sakha filter
+  const uniqueMekhalas = Array.from(new Set(topSakhas.map(s => s.mekhala).filter(Boolean)));
+
+  // Filter Sakhas
+  const filteredTopSakhas = topSakhas.filter(s => {
+    const matchesMekhala = sakhaMekhalaFilter === 'ALL' || s.mekhala === sakhaMekhalaFilter;
+    if (!matchesMekhala) return false;
+    if (!sakhaSearch.trim()) return true;
+    const q = sakhaSearch.toLowerCase();
+    return s.name.toLowerCase().includes(q) || (s.mekhala && s.mekhala.toLowerCase().includes(q));
+  });
+
+  // Extract all unique individual categories
+  const categories = Array.from(new Set(events.flatMap(e => getEventCategories(e)))).filter(Boolean);
 
   // Candidate Search results across all events
   const allCandidates = events.flatMap(e => e.candidates || []);
@@ -243,8 +285,30 @@ export default function DashboardPage() {
                         </div>
                         <h3 className="event-title">{event.name}</h3>
                       </div>
-                      <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {event.candidates?.length || 0} participants
+                      <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {event.candidates?.length || 0} participants
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            onClick={() => openPrintModal('stage', event, event.candidates || [])}
+                            title="Print Stage Manager Call Sheet"
+                          >
+                            📋 Stage
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            onClick={() => openPrintModal('result', event, event.candidates || [])}
+                            title="Print Event Result Sheet"
+                          >
+                            🖨️ Result
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -429,6 +493,29 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Mekhala Search Bar */}
+          <div className="filter-bar" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <div className="search-box" style={{ flex: 1 }}>
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="Search mekhala by name or short code..."
+                className="form-input"
+                value={mekhalaSearch}
+                onChange={(e) => setMekhalaSearch(e.target.value)}
+              />
+            </div>
+            {mekhalaSearch && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setMekhalaSearch('')}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
           {/* Full Table */}
           <div className="table-wrapper">
             <table className="custom-table">
@@ -445,40 +532,48 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {topMekhalas.map(m => (
-                  <tr key={m.name}>
-                    <td>
-                      <span className={`rank-pill ${
-                        m.rank === 1 ? 'rank-1' : m.rank === 2 ? 'rank-2' : m.rank === 3 ? 'rank-3' : ''
-                      }`}>
-                        {m.rank}
-                      </span>
-                    </td>
-                    <td>
-                      <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{m.name}</strong>
-                      {m.code && <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>({m.code})</span>}
-                    </td>
-                    <td>{m.candidateCount}</td>
-                    <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{m.firsts}</span></td>
-                    <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{m.seconds}</span></td>
-                    <td><span style={{ color: '#d97706', fontWeight: 600 }}>{m.thirds}</span></td>
-                    <td>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        {m.gradeA} / {m.gradeB} / {m.gradeC}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span style={{
-                        fontSize: '1.25rem',
-                        fontWeight: 800,
-                        fontFamily: 'var(--font-heading)',
-                        color: m.rank === 1 ? '#fbbf24' : 'var(--accent-cyan)'
-                      }}>
-                        {m.totalPoints}
-                      </span>
+                {filteredTopMekhalas.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      No mekhalas match your search "{mekhalaSearch}".
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTopMekhalas.map(m => (
+                    <tr key={m.name}>
+                      <td>
+                        <span className={`rank-pill ${
+                          m.rank === 1 ? 'rank-1' : m.rank === 2 ? 'rank-2' : m.rank === 3 ? 'rank-3' : ''
+                        }`}>
+                          {m.rank}
+                        </span>
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{m.name}</strong>
+                        {m.code && <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>({m.code})</span>}
+                      </td>
+                      <td>{m.candidateCount}</td>
+                      <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{m.firsts}</span></td>
+                      <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{m.seconds}</span></td>
+                      <td><span style={{ color: '#d97706', fontWeight: 600 }}>{m.thirds}</span></td>
+                      <td>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {m.gradeA} / {m.gradeB} / {m.gradeC}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span style={{
+                          fontSize: '1.25rem',
+                          fontWeight: 800,
+                          fontFamily: 'var(--font-heading)',
+                          color: m.rank === 1 ? '#fbbf24' : 'var(--accent-cyan)'
+                        }}>
+                          {m.totalPoints}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -547,6 +642,43 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Sakha Search & Filter Bar */}
+          <div className="filter-bar" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="search-box" style={{ flex: 1, minWidth: '220px' }}>
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="Search sakha by name or parent mekhala..."
+                className="form-input"
+                value={sakhaSearch}
+                onChange={(e) => setSakhaSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="form-select"
+              style={{ width: 'auto', minWidth: '180px' }}
+              value={sakhaMekhalaFilter}
+              onChange={(e) => setSakhaMekhalaFilter(e.target.value)}
+            >
+              <option value="ALL">All Mekhalas</option>
+              {uniqueMekhalas.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            {(sakhaSearch || sakhaMekhalaFilter !== 'ALL') && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setSakhaSearch('');
+                  setSakhaMekhalaFilter('ALL');
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
           {/* Full Sakha Table */}
           <div className="table-wrapper">
             <table className="custom-table">
@@ -564,49 +696,57 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {topSakhas.map(s => (
-                  <tr key={s.name}>
-                    <td>
-                      <span className={`rank-pill ${
-                        s.rank === 1 ? 'rank-1' : s.rank === 2 ? 'rank-2' : s.rank === 3 ? 'rank-3' : ''
-                      }`}>
-                        {s.rank}
-                      </span>
-                    </td>
-                    <td>
-                      <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{s.name}</strong>
-                    </td>
-                    <td>
-                      <span style={{
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        fontSize: '0.85rem'
-                      }}>
-                        {s.mekhala}
-                      </span>
-                    </td>
-                    <td>{s.candidateCount}</td>
-                    <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{s.firsts}</span></td>
-                    <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{s.seconds}</span></td>
-                    <td><span style={{ color: '#d97706', fontWeight: 600 }}>{s.thirds}</span></td>
-                    <td>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        {s.gradeA} / {s.gradeB} / {s.gradeC}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span style={{
-                        fontSize: '1.25rem',
-                        fontWeight: 800,
-                        fontFamily: 'var(--font-heading)',
-                        color: s.rank === 1 ? '#fbbf24' : 'var(--accent-cyan)'
-                      }}>
-                        {s.totalPoints}
-                      </span>
+                {filteredTopSakhas.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      No sakhas match your search filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTopSakhas.map(s => (
+                    <tr key={s.name}>
+                      <td>
+                        <span className={`rank-pill ${
+                          s.rank === 1 ? 'rank-1' : s.rank === 2 ? 'rank-2' : s.rank === 3 ? 'rank-3' : ''
+                        }`}>
+                          {s.rank}
+                        </span>
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{s.name}</strong>
+                      </td>
+                      <td>
+                        <span style={{
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          fontSize: '0.85rem'
+                        }}>
+                          {s.mekhala}
+                        </span>
+                      </td>
+                      <td>{s.candidateCount}</td>
+                      <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{s.firsts}</span></td>
+                      <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{s.seconds}</span></td>
+                      <td><span style={{ color: '#d97706', fontWeight: 600 }}>{s.thirds}</span></td>
+                      <td>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {s.gradeA} / {s.gradeB} / {s.gradeC}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span style={{
+                          fontSize: '1.25rem',
+                          fontWeight: 800,
+                          fontFamily: 'var(--font-heading)',
+                          color: s.rank === 1 ? '#fbbf24' : 'var(--accent-cyan)'
+                        }}>
+                          {s.totalPoints}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -690,6 +830,15 @@ export default function DashboardPage() {
           )}
         </div>
       )}
+
+      {/* Print Sheet Modal (for Stage Managers and Official Results) */}
+      <PrintSheetModal
+        isOpen={printModalState.isOpen}
+        onClose={() => setPrintModalState(prev => ({ ...prev, isOpen: false }))}
+        initialType={printModalState.type}
+        event={printModalState.event}
+        candidates={printModalState.candidates}
+      />
     </div>
   );
 }
