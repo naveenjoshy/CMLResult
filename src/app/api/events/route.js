@@ -27,7 +27,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, category, categories, gender, description, points, status, separateEvents } = body;
+    const { name, category, categories, gender, description, stageNumber, stageDescription, points, status, separateEvents } = body;
 
     if (!name || name.trim() === '') {
       return NextResponse.json({ success: false, message: 'Event name is required' }, { status: 400 });
@@ -57,6 +57,8 @@ export async function POST(request) {
 
     const eventGender = ['Male', 'Female'].includes(gender) ? gender : 'Both';
     const eventDesc = (description || '').trim();
+    const eventStageNumber = stageNumber !== undefined && stageNumber !== '' && stageNumber !== null ? Number(stageNumber) : null;
+    const eventStageDesc = (stageDescription || '').trim();
     const eventStatus = status || 'Upcoming';
 
     // When multiple categories are selected, create individual events for each category by default
@@ -78,6 +80,8 @@ export async function POST(request) {
               categories: [sec],
               gender: eventGender,
               description: eventDesc,
+              stageNumber: eventStageNumber,
+              stageDescription: eventStageDesc,
               points: defaultPoints,
               status: eventStatus,
             });
@@ -104,6 +108,8 @@ export async function POST(request) {
             categories: [sec],
             gender: eventGender,
             description: eventDesc,
+            stageNumber: eventStageNumber,
+            stageDescription: eventStageDesc,
             points: defaultPoints,
             status: eventStatus,
             createdAt: new Date(),
@@ -129,6 +135,8 @@ export async function POST(request) {
         categories: eventCategories,
         gender: eventGender,
         description: eventDesc,
+        stageNumber: eventStageNumber,
+        stageDescription: eventStageDesc,
         points: defaultPoints,
         status: eventStatus,
       });
@@ -143,6 +151,8 @@ export async function POST(request) {
       categories: eventCategories,
       gender: eventGender,
       description: eventDesc,
+      stageNumber: eventStageNumber,
+      stageDescription: eventStageDesc,
       points: defaultPoints,
       status: eventStatus,
       createdAt: new Date(),
@@ -158,7 +168,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, name, category, categories, gender, description, points, status } = body;
+    const { id, name, category, categories, gender, description, stageNumber, stageDescription, points, status } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, message: 'Event ID is required' }, { status: 400 });
@@ -182,6 +192,8 @@ export async function PUT(request) {
     }
 
     if (description !== undefined) updateData.description = description.trim();
+    if (stageNumber !== undefined) updateData.stageNumber = stageNumber !== '' && stageNumber !== null ? Number(stageNumber) : null;
+    if (stageDescription !== undefined) updateData.stageDescription = stageDescription.trim();
     if (status) updateData.status = status;
     if (points) {
       updateData.points = {

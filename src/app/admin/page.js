@@ -61,8 +61,6 @@ export default function AdminPage() {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState({
     name: '',
-    minAge: 5,
-    maxAge: 9,
     minDob: '',
     maxDob: '',
     description: '',
@@ -90,6 +88,8 @@ export default function AdminPage() {
     category: 'Junior',
     gender: 'Both',
     description: '',
+    stageNumber: '',
+    stageDescription: '',
     points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
     status: 'Upcoming',
     separateEvents: true,
@@ -265,6 +265,8 @@ export default function AdminPage() {
           categories: cats,
           category: cats.join(', '),
           gender: newEvent.gender || 'Both',
+          stageNumber: newEvent.stageNumber !== '' ? Number(newEvent.stageNumber) : null,
+          stageDescription: newEvent.stageDescription || '',
           separateEvents: newEvent.separateEvents !== false,
         }),
       });
@@ -284,6 +286,8 @@ export default function AdminPage() {
           category: 'Junior',
           gender: 'Both',
           description: '',
+          stageNumber: '',
+          stageDescription: '',
           points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
           status: 'Upcoming',
           separateEvents: true,
@@ -320,6 +324,8 @@ export default function AdminPage() {
           category: cats.join(', '),
           gender: editingEvent.gender || 'Both',
           description: editingEvent.description,
+          stageNumber: editingEvent.stageNumber !== '' && editingEvent.stageNumber !== undefined ? Number(editingEvent.stageNumber) : null,
+          stageDescription: editingEvent.stageDescription || '',
           points: editingEvent.points,
           status: editingEvent.status,
         }),
@@ -589,7 +595,7 @@ export default function AdminPage() {
       const json = await res.json();
       if (json.success) {
         setCategories(prev => [...prev, json.data]);
-        setNewCategory({ name: '', minAge: 5, maxAge: 9, minDob: '', maxDob: '', description: '', order: 10 });
+        setNewCategory({ name: '', minDob: '', maxDob: '', description: '', order: 10 });
         notify('success', `Category "${json.data.name}" added successfully!`);
       } else {
         notify('error', json.message || 'Failed to add category');
@@ -609,8 +615,6 @@ export default function AdminPage() {
         body: JSON.stringify({
           id: editingCategory._id,
           name: editingCategory.name,
-          minAge: editingCategory.minAge,
-          maxAge: editingCategory.maxAge,
           minDob: editingCategory.minDob,
           maxDob: editingCategory.maxDob,
           description: editingCategory.description,
@@ -1268,6 +1272,30 @@ export default function AdminPage() {
                 />
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Stage No.</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    placeholder="e.g. 1"
+                    value={newEvent.stageNumber}
+                    onChange={(e) => setNewEvent({ ...newEvent, stageNumber: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Stage Description</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Preliminary Round, Finals"
+                    value={newEvent.stageDescription}
+                    onChange={(e) => setNewEvent({ ...newEvent, stageDescription: e.target.value })}
+                  />
+                </div>
+              </div>
+
               {/* Position Points Configuration */}
               <div style={{ marginBottom: '1rem' }}>
                 <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>
@@ -1411,11 +1439,21 @@ export default function AdminPage() {
                       {ev.points?.gradeA ?? 5} / {ev.points?.gradeB ?? 3} / {ev.points?.gradeC ?? 1}
                     </td>
                     <td>
-                      <span className={`event-status ${
-                        ev.status === 'Completed' ? 'completed' : ev.status === 'In Progress' ? 'progress' : 'upcoming'
-                      }`}>
-                        {ev.status || 'Upcoming'}
-                      </span>
+                      <div style={{ fontSize: '0.82rem' }}>
+                        <span className={`event-status ${
+                          ev.status === 'Completed' ? 'completed'
+                          : ev.status === 'Ongoing' ? 'ongoing'
+                          : ev.status === 'In Progress' ? 'progress'
+                          : 'upcoming'
+                        }`}>
+                          {ev.status === 'Ongoing' ? '🔴 Ongoing' : ev.status || 'Upcoming'}
+                        </span>
+                        {ev.status === 'Ongoing' && ev.stageNumber && (
+                          <div style={{ marginTop: '0.3rem', color: '#fbbf24', fontWeight: 600, fontSize: '0.78rem' }}>
+                            Stage {ev.stageNumber}{ev.stageDescription ? ` — ${ev.stageDescription}` : ''}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -1896,32 +1934,7 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Minimum Age (years)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="120"
-                      className="form-input"
-                      placeholder="e.g. 5"
-                      value={newCategory.minAge}
-                      onChange={(e) => setNewCategory({ ...newCategory, minAge: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Maximum Age (years)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="120"
-                      className="form-input"
-                      placeholder="e.g. 9"
-                      value={newCategory.maxAge}
-                      onChange={(e) => setNewCategory({ ...newCategory, maxAge: e.target.value })}
-                    />
-                  </div>
-                </div>
+
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
@@ -2117,8 +2130,7 @@ export default function AdminPage() {
                   <tr>
                     <th style={{ width: '60px' }}>Order</th>
                     <th>Category / Section</th>
-                    <th>Age Criteria</th>
-                    <th>DOB Range Cutoff</th>
+                    <th>DOB Range (min → max)</th>
                     <th>Description</th>
                     <th>Candidates</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -2134,8 +2146,6 @@ export default function AdminPage() {
                   ) : (
                     categories.map(cat => {
                       const count = candidates.filter(c => c.section === cat.name).length;
-                      const hasAge = (cat.minAge !== null && cat.minAge !== undefined && cat.minAge !== '') ||
-                                     (cat.maxAge !== null && cat.maxAge !== undefined && cat.maxAge !== '');
                       const hasDob = cat.minDob || cat.maxDob;
 
                       return (
@@ -2155,29 +2165,12 @@ export default function AdminPage() {
                             <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{cat.name}</strong>
                           </td>
                           <td>
-                            {hasAge ? (
-                              <span style={{
-                                padding: '0.2rem 0.55rem',
-                                borderRadius: 'var(--radius-sm)',
-                                background: 'rgba(59, 130, 246, 0.12)',
-                                border: '1px solid rgba(59, 130, 246, 0.3)',
-                                color: '#93c5fd',
-                                fontSize: '0.83rem',
-                                fontWeight: 500
-                              }}>
-                                🎂 {cat.minAge ?? 0} – {cat.maxAge ?? '∞'} yrs
-                              </span>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Any Age</span>
-                            )}
-                          </td>
-                          <td>
                             {hasDob ? (
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                 {cat.minDob ? cat.minDob : 'Any'} → {cat.maxDob ? cat.maxDob : 'Any'}
                               </div>
                             ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No DOB cutoff</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No DOB cutoff (Open / General)</span>
                             )}
                           </td>
                           <td>
@@ -2385,6 +2378,7 @@ export default function AdminPage() {
                   onChange={(e) => setEditingEvent({ ...editingEvent, status: e.target.value })}
                 >
                   <option value="Upcoming">Upcoming</option>
+                  <option value="Ongoing">🔴 Ongoing</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Completed">Completed</option>
                 </select>
@@ -2398,6 +2392,30 @@ export default function AdminPage() {
                   value={editingEvent.description || ''}
                   onChange={(e) => setEditingEvent({ ...editingEvent, description: e.target.value })}
                 />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Stage No.</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    placeholder="e.g. 1"
+                    value={editingEvent.stageNumber ?? ''}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, stageNumber: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Stage Description</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Preliminary Round, Finals"
+                    value={editingEvent.stageDescription || ''}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, stageDescription: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
@@ -2448,30 +2466,7 @@ export default function AdminPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Minimum Age (years)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="120"
-                    className="form-input"
-                    value={editingCategory.minAge ?? ''}
-                    onChange={(e) => setEditingCategory({ ...editingCategory, minAge: e.target.value === '' ? '' : Number(e.target.value) })}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Maximum Age (years)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="120"
-                    className="form-input"
-                    value={editingCategory.maxAge ?? ''}
-                    onChange={(e) => setEditingCategory({ ...editingCategory, maxAge: e.target.value === '' ? '' : Number(e.target.value) })}
-                  />
-                </div>
-              </div>
+
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -2585,18 +2580,12 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="form-label" style={{ marginBottom: '0.2rem' }}>Date of Birth *</label>
-                    {editingCandidate.dob && (
-                      <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 500 }}>
-                        🎂 Age: {calculateAge(editingCandidate.dob)} yrs
-                      </span>
-                    )}
-                  </div>
+                  <label className="form-label" style={{ marginBottom: '0.2rem' }}>Date of Birth *</label>
                   <input
                     type="date"
                     className="form-input"
                     value={editingCandidate.dob}
+                    max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => {
                       const newDob = e.target.value;
                       const detectedSec = getCategoryForDob(newDob, categories);
@@ -2720,7 +2709,7 @@ export default function AdminPage() {
                   >
                     {(categories.length > 0 ? categories : DEFAULT_CATEGORY_RULES).map(cat => (
                       <option key={cat._id || cat.name} value={cat.name}>
-                        {cat.name} {cat.minAge !== undefined && cat.maxAge !== undefined ? `(${cat.minAge}-${cat.maxAge} yrs)` : ''}
+                        {cat.name} {cat.minDob && cat.maxDob ? ` (${cat.minDob.slice(0,4)}–${cat.maxDob.slice(0,4)})` : ''}
                       </option>
                     ))}
                   </select>

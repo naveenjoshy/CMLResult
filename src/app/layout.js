@@ -1,5 +1,6 @@
 import './globals.css';
 import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
 
 export const metadata = {
   title: 'CML Result Portal - Live Fest Results & Management',
@@ -16,16 +17,7 @@ export default function RootLayout({ children }) {
       <body>
         <Navbar />
         <main>{children}</main>
-        <footer style={{
-          textAlign: 'center',
-          padding: '2.5rem 1rem',
-          color: 'var(--text-muted)',
-          fontSize: '0.85rem',
-          borderTop: '1px solid var(--border-subtle)',
-          marginTop: '4rem'
-        }}>
-          <p>© {new Date().getFullYear()} CML Results Management System • Database: <strong>CMLResult</strong></p>
-        </footer>
+        <Footer />
       </body>
     </html>
   );

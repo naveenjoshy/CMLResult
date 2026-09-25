@@ -7,14 +7,6 @@ const CategorySchema = new mongoose.Schema({
     trim: true,
     unique: true,
   },
-  minAge: {
-    type: Number,
-    default: 0,
-  },
-  maxAge: {
-    type: Number,
-    default: 99,
-  },
   minDob: {
     type: String, // 'YYYY-MM-DD'
     default: '',

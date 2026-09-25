@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { getEventCategories } from '@/lib/eventUtils';
 
 export default function DashboardPage() {
@@ -85,6 +84,9 @@ export default function DashboardPage() {
   // Extract all unique individual categories
   const categories = Array.from(new Set(events.flatMap(e => getEventCategories(e)))).filter(Boolean);
 
+  // Ongoing events for the live section
+  const ongoingEvents = events.filter(ev => ev.status === 'Ongoing');
+
   // Candidate Search results across all events
   const allCandidates = events.flatMap(e => e.candidates || []);
   const searchedCandidates = searchQuery.trim() !== '' 
@@ -118,12 +120,6 @@ export default function DashboardPage() {
           >
             {refreshing ? '🔄 Refreshing...' : '🔄 Refresh Live Data'}
           </button>
-          <Link href="/register" className="btn btn-primary btn-sm">
-            ➕ Register Candidate
-          </Link>
-          <Link href="/admin" className="btn btn-secondary btn-sm">
-            ⚙️ Admin Panel
-          </Link>
         </div>
       </div>
 
@@ -140,7 +136,10 @@ export default function DashboardPage() {
           <span className="stat-value">
             {stats.completedEvents || 0} / {stats.totalEvents || 0}
           </span>
-          <span className="stat-sub">Events with results published</span>
+          <span className="stat-sub">
+            {ongoingEvents.length > 0 ? `${ongoingEvents.length} ongoing now • ` : ''}
+            Events with results published
+          </span>
         </div>
 
         <div className="glass-panel stat-card gold">
@@ -163,6 +162,108 @@ export default function DashboardPage() {
           </span>
         </div>
       </div>
+
+      {/* ONGOING EVENTS LIVE SECTION */}
+      {ongoingEvents.length > 0 && (
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            marginBottom: '1rem',
+          }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: 'var(--radius-full)',
+              padding: '0.3rem 0.85rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              color: '#f87171',
+              animation: 'pulse 2s infinite',
+            }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 1s infinite' }}></span>
+              LIVE NOW
+            </div>
+            <h2 style={{ color: '#fff', fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
+              Ongoing Events ({ongoingEvents.length})
+            </h2>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {ongoingEvents.map(ev => (
+              <div key={ev._id || ev.name} style={{
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.08), rgba(30,20,40,0.6))',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '1.15rem 1.25rem',
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
+                {/* Pulsing top edge line */}
+                <div style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0,
+                  height: '3px',
+                  background: 'linear-gradient(90deg, #ef4444, #f97316)',
+                  borderRadius: '4px 4px 0 0',
+                }} />
+
+                {/* Event name */}
+                <div style={{ fontWeight: 700, fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', paddingRight: '0.5rem' }}>
+                  {ev.name}
+                </div>
+
+                {/* Stage info */}
+                {ev.stageNumber && (
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    background: 'rgba(251, 191, 36, 0.12)',
+                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                    borderRadius: '6px',
+                    padding: '0.2rem 0.6rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#fbbf24',
+                    marginBottom: '0.5rem',
+                  }}>
+                    🏁 Stage {ev.stageNumber}{ev.stageDescription ? ` — ${ev.stageDescription}` : ''}
+                  </div>
+                )}
+
+                {/* Category badges */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.6rem' }}>
+                  {getEventCategories(ev).map((cat, i) => (
+                    <span key={i} className="event-category-badge" style={{ fontSize: '0.72rem' }}>{cat}</span>
+                  ))}
+                  <span style={{
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '4px',
+                    background: 'rgba(255,255,255,0.05)',
+                    fontSize: '0.72rem',
+                    color: 'var(--text-muted)',
+                  }}>
+                    {ev.gender === 'Both' || !ev.gender ? '♀️♂️ Both' : ev.gender}
+                  </span>
+                </div>
+
+                {/* Candidate count */}
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  👤 {ev.candidates?.length || 0} participants
+                  {ev.description && (
+                    <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>• {ev.description}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Tab Navigation */}
       <div className="tabs-nav">

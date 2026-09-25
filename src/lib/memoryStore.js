@@ -1,7 +1,8 @@
 /**
  * Resilient in-memory fallback store
- * Used if MongoDB cluster URI is not configured yet or offline,
- * so the application is immediately testable with starter seed data.
+ * Updated schema: categories use DOB ranges only (no minAge/maxAge).
+ * Events include stageNumber and stageDescription fields.
+ * Status enum: 'Upcoming' | 'Ongoing' | 'In Progress' | 'Completed'
  */
 
 let memoryStore = {
@@ -45,14 +46,9 @@ let memoryStore = {
       categories: ['Junior'],
       gender: 'Both',
       description: 'Individual public speaking event',
-      points: {
-        first: 5,
-        second: 3,
-        third: 1,
-        gradeA: 5,
-        gradeB: 3,
-        gradeC: 1,
-      },
+      stageNumber: null,
+      stageDescription: '',
+      points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
       status: 'Completed',
       createdAt: new Date(),
     },
@@ -63,14 +59,9 @@ let memoryStore = {
       categories: ['Senior'],
       gender: 'Both',
       description: 'Solo vocal competition',
-      points: {
-        first: 5,
-        second: 3,
-        third: 1,
-        gradeA: 5,
-        gradeB: 3,
-        gradeC: 1,
-      },
+      stageNumber: null,
+      stageDescription: '',
+      points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
       status: 'Completed',
       createdAt: new Date(),
     },
@@ -81,14 +72,9 @@ let memoryStore = {
       categories: ['Sub-Junior', 'Junior', 'Senior', 'Super Senior', 'General'],
       gender: 'Both',
       description: 'General knowledge & history',
-      points: {
-        first: 5,
-        second: 3,
-        third: 1,
-        gradeA: 5,
-        gradeB: 3,
-        gradeC: 1,
-      },
+      stageNumber: null,
+      stageDescription: '',
+      points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
       status: 'In Progress',
       createdAt: new Date(),
     },
@@ -99,14 +85,9 @@ let memoryStore = {
       categories: ['Sub-Junior'],
       gender: 'Both',
       description: 'Creative and analytical writing',
-      points: {
-        first: 5,
-        second: 3,
-        third: 1,
-        gradeA: 5,
-        gradeB: 3,
-        gradeC: 1,
-      },
+      stageNumber: null,
+      stageDescription: '',
+      points: { first: 5, second: 3, third: 1, gradeA: 5, gradeB: 3, gradeC: 1 },
       status: 'Upcoming',
       createdAt: new Date(),
     }
@@ -126,7 +107,7 @@ let memoryStore = {
       event: 'Elocution (English)',
       position: 'First',
       grade: 'A',
-      totalPoints: 10, // 5 (1st) + 5 (Grade A)
+      totalPoints: 10,
       createdAt: new Date(),
     },
     {
@@ -143,7 +124,7 @@ let memoryStore = {
       event: 'Elocution (English)',
       position: 'Second',
       grade: 'A',
-      totalPoints: 8, // 3 (2nd) + 5 (Grade A)
+      totalPoints: 8,
       createdAt: new Date(),
     },
     {
@@ -177,7 +158,7 @@ let memoryStore = {
       event: 'Classical Music',
       position: 'Second',
       grade: 'B',
-      totalPoints: 6, // 3 + 3
+      totalPoints: 6,
       createdAt: new Date(),
     },
   ],
@@ -185,51 +166,41 @@ let memoryStore = {
     {
       _id: 'cat_sub_junior',
       name: 'Sub-Junior',
-      minAge: 5,
-      maxAge: 9,
       minDob: '2016-01-01',
       maxDob: '2022-12-31',
-      description: 'Ages 5 to 9 (Classes 1 to 4)',
+      description: 'Born between 2016 and 2022 (Classes 1 to 4)',
       order: 1,
     },
     {
       _id: 'cat_junior',
       name: 'Junior',
-      minAge: 10,
-      maxAge: 12,
       minDob: '2013-01-01',
       maxDob: '2015-12-31',
-      description: 'Ages 10 to 12 (Classes 5 to 7)',
+      description: 'Born between 2013 and 2015 (Classes 5 to 7)',
       order: 2,
     },
     {
       _id: 'cat_senior',
       name: 'Senior',
-      minAge: 13,
-      maxAge: 15,
       minDob: '2010-01-01',
       maxDob: '2012-12-31',
-      description: 'Ages 13 to 15 (Classes 8 to 10)',
+      description: 'Born between 2010 and 2012 (Classes 8 to 10)',
       order: 3,
     },
     {
       _id: 'cat_super_senior',
       name: 'Super Senior',
-      minAge: 16,
-      maxAge: 18,
       minDob: '2007-01-01',
       maxDob: '2009-12-31',
-      description: 'Ages 16 to 18 (Plus One & Plus Two)',
+      description: 'Born between 2007 and 2009 (Plus One & Plus Two)',
       order: 4,
     },
     {
       _id: 'cat_general',
       name: 'General',
-      minAge: 0,
-      maxAge: 99,
       minDob: '',
       maxDob: '',
-      description: 'Open to all ages / Common events',
+      description: 'Open to all / Common events',
       order: 5,
     },
   ],

@@ -6,47 +6,37 @@ import { getMemoryStore } from '@/lib/memoryStore';
 const DEFAULT_CATEGORIES = [
   {
     name: 'Sub-Junior',
-    minAge: 5,
-    maxAge: 9,
     minDob: '2016-01-01',
     maxDob: '2022-12-31',
-    description: 'Ages 5 to 9 (Classes 1 to 4)',
+    description: 'Born between 2016 and 2022 (Classes 1 to 4)',
     order: 1,
   },
   {
     name: 'Junior',
-    minAge: 10,
-    maxAge: 12,
     minDob: '2013-01-01',
     maxDob: '2015-12-31',
-    description: 'Ages 10 to 12 (Classes 5 to 7)',
+    description: 'Born between 2013 and 2015 (Classes 5 to 7)',
     order: 2,
   },
   {
     name: 'Senior',
-    minAge: 13,
-    maxAge: 15,
     minDob: '2010-01-01',
     maxDob: '2012-12-31',
-    description: 'Ages 13 to 15 (Classes 8 to 10)',
+    description: 'Born between 2010 and 2012 (Classes 8 to 10)',
     order: 3,
   },
   {
     name: 'Super Senior',
-    minAge: 16,
-    maxAge: 18,
     minDob: '2007-01-01',
     maxDob: '2009-12-31',
-    description: 'Ages 16 to 18 (Plus One & Plus Two)',
+    description: 'Born between 2007 and 2009 (Plus One & Plus Two)',
     order: 4,
   },
   {
     name: 'General',
-    minAge: 0,
-    maxAge: 99,
     minDob: '',
     maxDob: '',
-    description: 'Open to all ages / Common events',
+    description: 'Open to all / Common events',
     order: 5,
   },
 ];
@@ -55,11 +45,10 @@ export async function GET() {
   try {
     const conn = await connectToDatabase();
     if (conn) {
-      let categories = await Category.find({}).sort({ order: 1, minAge: 1, name: 1 });
+      let categories = await Category.find({}).sort({ order: 1, name: 1 });
       if (!categories || categories.length === 0) {
-        // Seed default categories
         await Category.insertMany(DEFAULT_CATEGORIES);
-        categories = await Category.find({}).sort({ order: 1, minAge: 1, name: 1 });
+        categories = await Category.find({}).sort({ order: 1, name: 1 });
       }
       return NextResponse.json({ success: true, data: categories, source: 'mongodb' });
     }
@@ -74,7 +63,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, minAge, maxAge, minDob, maxDob, description, order } = body;
+    const { name, minDob, maxDob, description, order } = body;
 
     if (!name || name.trim() === '') {
       return NextResponse.json({ success: false, message: 'Category name is required' }, { status: 400 });
@@ -91,8 +80,6 @@ export async function POST(request) {
 
       const created = await Category.create({
         name: trimmedName,
-        minAge: Number(minAge) || 0,
-        maxAge: Number(maxAge) || 99,
         minDob: (minDob || '').trim(),
         maxDob: (maxDob || '').trim(),
         description: (description || '').trim(),
@@ -112,8 +99,6 @@ export async function POST(request) {
     const newCat = {
       _id: 'cat_' + Date.now(),
       name: trimmedName,
-      minAge: Number(minAge) || 0,
-      maxAge: Number(maxAge) || 99,
       minDob: (minDob || '').trim(),
       maxDob: (maxDob || '').trim(),
       description: (description || '').trim(),
@@ -131,7 +116,7 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { id, name, minAge, maxAge, minDob, maxDob, description, order } = body;
+    const { id, name, minDob, maxDob, description, order } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, message: 'Category ID is required' }, { status: 400 });
@@ -140,8 +125,6 @@ export async function PUT(request) {
     const conn = await connectToDatabase();
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
-    if (minAge !== undefined) updateData.minAge = Number(minAge);
-    if (maxAge !== undefined) updateData.maxAge = Number(maxAge);
     if (minDob !== undefined) updateData.minDob = minDob.trim();
     if (maxDob !== undefined) updateData.maxDob = maxDob.trim();
     if (description !== undefined) updateData.description = description.trim();

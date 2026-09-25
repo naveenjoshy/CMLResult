@@ -24,6 +24,16 @@ const EventSchema = new mongoose.Schema({
   description: {
     type: String,
     trim: true,
+    default: '',
+  },
+  stageNumber: {
+    type: Number,
+    default: null,
+  },
+  stageDescription: {
+    type: String,
+    trim: true,
+    default: '',
   },
   points: {
     first: { type: Number, default: 5 },
@@ -35,7 +45,7 @@ const EventSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Upcoming', 'In Progress', 'Completed'],
+    enum: ['Upcoming', 'Ongoing', 'In Progress', 'Completed'],
     default: 'Upcoming',
   },
   createdAt: {

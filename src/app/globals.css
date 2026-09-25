@@ -238,6 +238,7 @@ button, input, select, textarea {
   margin-bottom: 1rem;
   background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -616,6 +617,12 @@ button, input, select, textarea {
 .event-status.upcoming {
   background: rgba(148, 163, 184, 0.15);
   color: #94a3b8;
+}
+
+.event-status.ongoing {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .winners-list {

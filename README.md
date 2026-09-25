@@ -1,85 +1,86 @@
 # CML Result Portal
 
-A modern web application for festival event management, candidate registrations, and live results leaderboard with rankings for **Mekhalas** and **Sakhas**.
+A festival management portal for candidate registration, event operations, scoring, and live results for Mekhalas and Sakhas.
 
-Built with **Next.js (App Router)**, **React**, **MongoDB & Mongoose** (Database: `CMLResult`), and a custom **Vanilla CSS Design System**.
+Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and a custom CSS design system.
 
----
+## Features
 
-## ✨ Features
+### Public results dashboard (`/`)
 
-### 1. 🏆 Live Dashboard Screen (`/`)
-- **Real-Time Standings**: Overview stats (Total Candidates, Completed Events, Leading Mekhala, Leading Sakha).
-- **Top Mekhala Leaderboard**: Interactive podium (Champion, Runner-up, Third) + comprehensive table showing total points, medals (1st, 2nd, 3rd), and Grade counts (A, B, C).
-- **Top Sakha Leaderboard**: Sakha championship standings with podium and parent Mekhala association.
-- **Results by Event**: Card-based event view with status badge, point scheme legend, and 1st, 2nd, 3rd place winners with grades and points.
-- **Candidate Search**: Fast search by candidate name or chest number (e.g., `CML-101`) to inspect individual scorecards.
+- Overview of registered candidates, event progress, and leading Mekhala and Sakha.
+- Ongoing-event section with stage, section, eligibility, and participant details.
+- Results by event, including event status, point scheme, and first-, second-, and third-place results with candidate details, grades, and points.
+- Mekhala and Sakha leaderboards with podiums, ranks, points, candidate counts, medal totals, and grade counts. Sakha standings include their parent Mekhala.
+- Search and filters for events by name, section, candidate, or chest number; search Mekhalas by name or code; filter Sakhas by name or parent Mekhala; and search candidate scorecards by name, chest number, house, Sakha, or Mekhala.
+- Results refresh automatically every 20 seconds, with a manual refresh option.
 
-### 2. 📝 Candidate Registration Portal (`/register`)
-- **Candidate Fields**:
-  - Name
-  - House Name
-  - Date of Birth (DOB)
-  - Mekhala (dropdown populated from database)
-  - Sakha (dynamically filtered based on selected Mekhala)
-  - Section (Sub-Junior, Junior, Senior, Super Senior, General)
-  - Sex (Male, Female, Other)
-  - Event (dropdown populated from active events)
-- **Auto-generated Chest Numbers**: e.g., `CML-101`, `CML-102`.
-- **Registration Badge & Print View**: Printable receipt and badge upon registration.
+### Candidate registration (`/register`)
 
-### 3. ⚙️ Admin Section (`/admin`)
-- **Password Protected**: Configured via `ADMIN_PASSWORD` (default: `admin123`).
-- **Result Entry & Scoring**:
-  - Select any event.
-  - Set candidate Position (**1st**, **2nd**, **3rd**, **None**) and Grade (**A**, **B**, **C**, **None**).
-  - Points automatically recalculate in real-time.
-  - Toggle event status (**Upcoming**, **In Progress**, **Completed**).
-- **Manage Events**:
-  - Add new events with customizable points:
-    - Default: 5 pts for 1st / Grade A, 3 pts for 2nd / Grade B, 1 pt for 3rd / Grade C.
-    - Customizable per event as requested!
-  - Delete events.
-- **Manage Candidates**:
-  - View all registered candidates, search and filter.
-  - Edit candidate details (Name, House Name, DOB, Mekhala, Sakha, Section, Sex, Event).
-  - Delete candidate.
-- **Manage Mekhalas**:
-  - Add new Mekhalas with short codes.
-  - View candidate counts and delete.
-- **Manage Sakhas**:
-  - Add new Sakhas assigned to a parent Mekhala.
-  - View candidate counts and delete.
+- Public registration form for name, house, date of birth, contact phone, Mekhala, Sakha, section, sex, and event.
+- Sakha choices filter to the selected Mekhala. Event choices update to match the candidate's section and sex.
+- Section is selected automatically from the configured date-of-birth rules; administrators can configure the rules and test them with the DOB simulator.
+- Registration deadline can be configured with `REGISTRATION_END_DATE`. The portal shows the deadline and prevents public submissions after it passes. Admins can still add candidates from the admin portal.
+- Successful registrations show a confirmation card and printable registration details. Chest numbers are issued separately by an administrator; they are not assigned by public registration.
 
----
+### Admin portal (`/admin`)
 
-## 🗄️ MongoDB Atlas Configuration
+- Password/PIN gate, with the password configured using `ADMIN_PASSWORD`. A successful login is remembered for the browser session.
+- **Results and scoring:** assign first, second, or third place and grades A, B, or C; points recalculate for candidates and their Mekhalas and Sakhas. Update event status between Upcoming, In Progress, and Completed.
+- **Event management:** add, edit, and delete events; configure eligible sections, gender, description, stage details, status, and placement/grade point values. Create separate events per selected section or combine sections into one event.
+- **Candidate management:** search, add, edit, and delete candidates. Admin registration bypasses the public registration deadline. Issue sequential `CML-101`-style chest numbers to candidates who do not have one, or edit a candidate's number directly.
+- **Mekhala and Sakha management:** add and delete Mekhalas and Sakhas, assign Sakhas to a parent Mekhala, and view candidate counts.
+- **Section and DOB rules:** add, edit, and delete sections; configure DOB ranges, descriptions, and display order; preview the section assigned to a test DOB.
+- **Print documents:** preview and print a stage-manager call sheet sorted by chest number or an official result sheet sorted by placement and points.
+- **Winner posters:** generate downloadable, high-resolution result posters in portrait post, story, or square formats; copy a prepared social caption and use the available share action.
+- Database connection status is displayed in the admin navigation.
 
-The application stores data in a MongoDB cluster inside a database named **`CMLResult`**.
+## Requirements
 
-### Connecting your MongoDB Cluster:
-1. Open [.env.local](file:///Users/mr.naveenjoshy/Brototype/WebApps/CMLResult/.env.local).
-2. Set your MongoDB Atlas connection string:
-   ```env
-   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/CMLResult?retryWrites=true&w=majority
-   MONGODB_DB=CMLResult
-   ADMIN_PASSWORD=admin123
-   ```
-3. Restart or reload the server. The navbar status indicator will turn green: `DB: CMLResult`.
+- Node.js compatible with Next.js 15
+- npm
+- MongoDB Atlas or another MongoDB deployment for persistent data (optional for trying the app with the in-memory store)
 
-*Note: If no connection string is provided, the application runs seamlessly in local memory fallback mode with starter seed data so you can test all features immediately.*
-
----
-
-## 🚀 Running Locally
+## Setup
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
-npm run dev
-
-# Open in browser
-http://localhost:3000
 ```
+
+Create `.env.local` in the project root. For persistent MongoDB storage, configure:
+
+```env
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DB=CMLResult
+ADMIN_PASSWORD=replace-with-a-strong-password
+REGISTRATION_END_DATE=2026-10-01T23:59:00
+```
+
+`MONGODB_DB` defaults to `CMLResult`. `ADMIN_PASSWORD` defaults to `admin123` if omitted; set a strong password before deployment. `REGISTRATION_END_DATE` is optional; when unset or invalid, public registration remains open. Set it to a date/time accepted by JavaScript's `Date` parser.
+
+When `MONGODB_URI` is not configured or MongoDB is unavailable, the app uses its in-memory fallback store with sample data. Changes in this mode are temporary and are lost when the server restarts. Use MongoDB for persistent event and candidate data.
+
+## Run
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+To create a production build and run it locally:
+
+```bash
+npm run build
+npm run start
+```
+
+## Database initialization
+
+With `MONGODB_URI` configured, the optional initializer creates the core collections and inserts starter Mekhalas, Sakhas, events, and candidates when those collections are empty:
+
+```bash
+node scripts/init-db.mjs
+```
+
+The initializer is optional; the application can create and manage its data through the admin portal.

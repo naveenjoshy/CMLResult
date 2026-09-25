@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import {
   isEventAvailableForCandidate,
   formatEventCategories,
@@ -237,13 +236,8 @@ export default function RegisterPage() {
           <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: '520px', margin: '0 auto 2rem' }}>
             registration date is over, contact admin for more details.
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link href="/" className="btn btn-primary">
-              🏆 View Results & Dashboard
-            </Link>
-            <Link href="/admin" className="btn btn-secondary">
-              ⚙️ Admin Login
-            </Link>
+          <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Please check back during the next registration window.
           </div>
         </div>
       ) : registeredCandidate ? (
@@ -312,9 +306,6 @@ export default function RegisterPage() {
             >
               🖨️ Print Receipt
             </button>
-            <Link href="/" className="btn btn-secondary">
-              🏆 View Dashboard
-            </Link>
           </div>
         </div>
       ) : (
@@ -384,10 +375,11 @@ export default function RegisterPage() {
                   name="dob"
                   className="form-input"
                   value={formData.dob}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={handleChange}
                   required
                 />
-                {calculateAge(formData.dob) !== null && (
+                {formData.dob && (
                   <div style={{
                     marginTop: '0.45rem',
                     fontSize: '0.82rem',
@@ -400,8 +392,6 @@ export default function RegisterPage() {
                     borderRadius: 'var(--radius-sm)',
                     padding: '0.35rem 0.65rem'
                   }}>
-                    <span>🎂 <strong>Age:</strong> {calculateAge(formData.dob)} yrs</span>
-                    <span>•</span>
                     <span>🎯 <strong>Category Auto-Selected:</strong> <strong style={{ color: '#fbbf24' }}>{formData.section}</strong></span>
                   </div>
                 )}
@@ -442,59 +432,47 @@ export default function RegisterPage() {
                 </select>
               </div>
 
-              {/* Section */}
+              {/* Section — auto-detected from DOB, read-only */}
               <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" htmlFor="section" style={{ marginBottom: 0 }}>
-                    Section / Category <span className="req">*</span>
-                  </label>
-                  {formData.dob && (
-                    <button
-                      type="button"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--accent-cyan)',
-                        fontSize: '0.75rem',
-                        cursor: 'pointer',
-                        padding: 0,
-                        textDecoration: 'underline'
-                      }}
-                      onClick={() => {
-                        const detected = getCategoryForDob(formData.dob, categoryRules);
-                        if (detected) {
-                          const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, detected, formData.sex));
-                          const currentValid = validForNew.some(ev => ev.name === formData.event);
-                          setFormData(prev => ({
-                            ...prev,
-                            section: detected,
-                            event: currentValid ? prev.event : (validForNew[0]?.name || '')
-                          }));
-                        }
-                      }}
-                    >
-                      🔄 Re-detect from DOB
-                    </button>
-                  )}
-                </div>
-                <select
-                  id="section"
-                  name="section"
-                  className="form-select"
-                  style={{ marginTop: '0.35rem' }}
-                  value={formData.section}
-                  onChange={handleChange}
-                  required
-                >
-                  {categoryRules.map(cat => (
-                    <option key={cat._id || cat.name} value={cat.name}>
-                      {cat.name} {cat.minAge && cat.maxAge ? `(Ages ${cat.minAge}–${cat.maxAge})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                  Auto-selected based on candidate's Date of Birth. You may also change it manually if necessary.
-                </div>
+                <label className="form-label">
+                  Section / Category
+                </label>
+                {formData.dob ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem',
+                    marginTop: '0.35rem',
+                    padding: '0.65rem 0.9rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(251, 191, 36, 0.07)',
+                    border: '1px solid rgba(251, 191, 36, 0.25)',
+                  }}>
+                    <span style={{ fontSize: '1rem' }}>🔒</span>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '1rem', color: '#fbbf24' }}>
+                        {formData.section || '—'}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                        Auto-assigned from Date of Birth · Cannot be changed manually
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    marginTop: '0.35rem',
+                    padding: '0.6rem 0.9rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(148,163,184,0.06)',
+                    border: '1px dashed rgba(148,163,184,0.2)',
+                    fontSize: '0.82rem',
+                    color: 'var(--text-muted)',
+                  }}>
+                    📅 Please select a Date of Birth above — category will be assigned automatically.
+                  </div>
+                )}
+                {/* Hidden input keeps the value in the form */}
+                <input type="hidden" name="section" value={formData.section} />
               </div>
 
               {/* Mekhala */}
