@@ -12,6 +12,9 @@ import {
   formatEventGender,
   getEventCategories,
   getSectionEventName,
+  calculateAge,
+  getCategoryForDob,
+  DEFAULT_CATEGORY_RULES,
 } from '@/lib/eventUtils';
 import PrintSheetModal from '@/components/PrintSheetModal';
 import ResultPosterModal from '@/components/ResultPosterModal';
@@ -20,7 +23,7 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
-  const [activeAdminTab, setActiveAdminTab] = useState('results'); // 'results', 'events', 'candidates', 'mekhala', 'sakha', 'db'
+  const [activeAdminTab, setActiveAdminTab] = useState('results'); // 'results', 'events', 'candidates', 'mekhala', 'sakha', 'categories', 'db'
 
   // Print modal state
   const [printModalState, setPrintModalState] = useState({
@@ -53,6 +56,20 @@ export default function AdminPage() {
       candidates: eventCandidates || [],
     });
   };
+
+  // Category & DOB Rules state
+  const [categories, setCategories] = useState([]);
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    minAge: 5,
+    maxAge: 9,
+    minDob: '',
+    maxDob: '',
+    description: '',
+    order: 10,
+  });
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [testDob, setTestDob] = useState('');
 
   // Data states
   const [events, setEvents] = useState([]);
@@ -106,12 +123,13 @@ export default function AdminPage() {
   async function fetchAllData() {
     setLoading(true);
     try {
-      const [resE, resC, resM, resS, resD] = await Promise.all([
+      const [resE, resC, resM, resS, resD, resCat] = await Promise.all([
         fetch('/api/events'),
         fetch('/api/candidates'),
         fetch('/api/mekhalas'),
         fetch('/api/sakhas'),
         fetch('/api/db-status'),
+        fetch('/api/categories'),
       ]);
 
       const dataE = await resE.json();
@@ -119,6 +137,7 @@ export default function AdminPage() {
       const dataM = await resM.json();
       const dataS = await resS.json();
       const dataD = await resD.json();
+      const dataCat = await resCat.json();
 
       if (dataE.success) {
         setEvents(dataE.data || []);
@@ -127,6 +146,7 @@ export default function AdminPage() {
         }
       }
       if (dataC.success) setCandidates(dataC.data || []);
+      if (dataCat.success) setCategories(dataCat.data || []);
       if (dataM.success) {
         setMekhalas(dataM.data || []);
         if (dataM.data?.length > 0 && !newSakha.mekhala) {
@@ -553,6 +573,79 @@ export default function AdminPage() {
     }
   };
 
+  // 6. CATEGORIES / SECTIONS MANAGEMENT
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    if (!newCategory.name.trim()) {
+      notify('error', 'Category name is required');
+      return;
+    }
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCategory),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCategories(prev => [...prev, json.data]);
+        setNewCategory({ name: '', minAge: 5, maxAge: 9, minDob: '', maxDob: '', description: '', order: 10 });
+        notify('success', `Category "${json.data.name}" added successfully!`);
+      } else {
+        notify('error', json.message || 'Failed to add category');
+      }
+    } catch (err) {
+      notify('error', 'Failed to add category');
+    }
+  };
+
+  const handleUpdateCategory = async (e) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingCategory._id,
+          name: editingCategory.name,
+          minAge: editingCategory.minAge,
+          maxAge: editingCategory.maxAge,
+          minDob: editingCategory.minDob,
+          maxDob: editingCategory.maxDob,
+          description: editingCategory.description,
+          order: editingCategory.order,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCategories(prev => prev.map(c => c._id === editingCategory._id ? json.data : c));
+        setEditingCategory(null);
+        notify('success', `Category "${json.data.name}" updated successfully!`);
+      } else {
+        notify('error', json.message || 'Failed to update category');
+      }
+    } catch (err) {
+      notify('error', 'Failed to update category');
+    }
+  };
+
+  const handleDeleteCategory = async (id, name) => {
+    if (!confirm(`Are you sure you want to delete category "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/categories?id=${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) {
+        setCategories(prev => prev.filter(c => c._id !== id));
+        notify('success', `Category "${name}" deleted`);
+      } else {
+        notify('error', json.message || 'Failed to delete category');
+      }
+    } catch (err) {
+      notify('error', 'Failed to delete category');
+    }
+  };
+
   // If not authenticated, show PIN Login Screen
   if (!isAuthenticated) {
     return (
@@ -728,6 +821,13 @@ export default function AdminPage() {
           onClick={() => setActiveAdminTab('sakha')}
         >
           🏢 Sakhas ({sakhas.length})
+        </button>
+        <button
+          type="button"
+          className={`tab-btn ${activeAdminTab === 'categories' ? 'active' : ''}`}
+          onClick={() => setActiveAdminTab('categories')}
+        >
+          🎯 Sections & DOB Rules ({categories.length})
         </button>
       </div>
 
@@ -1746,6 +1846,381 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* TAB 6: CATEGORIES & DOB RULES */}
+      {activeAdminTab === 'categories' && (
+        <div>
+          {/* Header Info Banner */}
+          <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                  <h3 style={{ color: '#fff', fontSize: '1.3rem', margin: 0 }}>
+                    🎯 Categories / Sections & Date of Birth Rules
+                  </h3>
+                  <span className="badge badge-primary">Auto-Categorization Active</span>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', margin: 0, maxWidth: '800px', lineHeight: 1.5 }}>
+                  Define age ranges and optional DOB cutoffs for each section (e.g. Sub-Junior, Junior, Senior, Super Senior).
+                  When a candidate enters or updates their <strong>Date of Birth</strong> during registration or in the admin panel, their section is automatically calculated and assigned.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={fetchAllData}
+                >
+                  🔄 Refresh Rules
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 2-Column Responsive Layout: Add Category & DOB Simulator */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+            {/* ADD CATEGORY FORM */}
+            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+              <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>➕</span> Add / Configure Section
+              </h4>
+              <form onSubmit={handleAddCategory}>
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label className="form-label">Category / Section Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Sub-Junior, Junior, Kids, Masters"
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Minimum Age (years)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="120"
+                      className="form-input"
+                      placeholder="e.g. 5"
+                      value={newCategory.minAge}
+                      onChange={(e) => setNewCategory({ ...newCategory, minAge: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Maximum Age (years)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="120"
+                      className="form-input"
+                      placeholder="e.g. 9"
+                      value={newCategory.maxAge}
+                      onChange={(e) => setNewCategory({ ...newCategory, maxAge: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Min DOB (Earliest)</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={newCategory.minDob}
+                      onChange={(e) => setNewCategory({ ...newCategory, minDob: e.target.value })}
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Optional exact cutoff</small>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Max DOB (Latest)</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={newCategory.maxDob}
+                      onChange={(e) => setNewCategory({ ...newCategory, maxDob: e.target.value })}
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Optional exact cutoff</small>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Sort Order</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      placeholder="1"
+                      value={newCategory.order}
+                      onChange={(e) => setNewCategory({ ...newCategory, order: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Description / Note</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Primary school students"
+                      value={newCategory.description}
+                      onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                  ➕ Save Section & DOB Rule
+                </button>
+              </form>
+            </div>
+
+            {/* INTERACTIVE DOB SIMULATOR / TESTER */}
+            <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>🧪</span> Test Candidate DOB Simulator
+                </h4>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                  Test how a candidate's Date of Birth will be mapped to a Section in real time based on your active rules.
+                </p>
+
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label className="form-label">Enter or Pick Test Date of Birth</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={testDob}
+                    onChange={(e) => setTestDob(e.target.value)}
+                    style={{ fontSize: '1.05rem', padding: '0.65rem 0.9rem' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
+                    Quick Test Presets:
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      onClick={() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 7);
+                        setTestDob(d.toISOString().split('T')[0]);
+                      }}
+                    >
+                      👶 Age 7 (Sub-Junior)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      onClick={() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 11);
+                        setTestDob(d.toISOString().split('T')[0]);
+                      }}
+                    >
+                      👦 Age 11 (Junior)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      onClick={() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 14);
+                        setTestDob(d.toISOString().split('T')[0]);
+                      }}
+                    >
+                      🧑 Age 14 (Senior)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      onClick={() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 17);
+                        setTestDob(d.toISOString().split('T')[0]);
+                      }}
+                    >
+                      👨 Age 17 (Super Senior)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Calculation Result Preview Box */}
+                {testDob ? (
+                  <div style={{
+                    padding: '1.25rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(59, 130, 246, 0.08)',
+                    border: '1px solid rgba(59, 130, 246, 0.25)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Calculated Age:</span>
+                      <strong style={{ fontSize: '1.2rem', color: '#60a5fa' }}>
+                        {calculateAge(testDob)} years old
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Auto-Selected Section:</span>
+                      <span style={{
+                        padding: '0.35rem 0.85rem',
+                        borderRadius: '20px',
+                        background: 'rgba(16, 185, 129, 0.2)',
+                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                        color: '#34d399',
+                        fontWeight: 'bold',
+                        fontSize: '1rem'
+                      }}>
+                        🎯 {getCategoryForDob(testDob, categories)}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
+                      Candidate will automatically be enrolled in this section & eligible events.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '1.25rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px dashed rgba(255, 255, 255, 0.1)',
+                    textAlign: 'center',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.85rem'
+                  }}>
+                    Select or click a preset above to preview age calculation & auto-selected section.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                ℹ️ Rules are evaluated by priority order. If DOB matches a category's age or date range, that section is picked instantly.
+              </div>
+            </div>
+          </div>
+
+          {/* EXISTING CATEGORIES TABLE */}
+          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h4 style={{ color: '#fff', fontSize: '1.15rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>📋</span> Active Categories & DOB Rules ({categories.length})
+            </h4>
+
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '60px' }}>Order</th>
+                    <th>Category / Section</th>
+                    <th>Age Criteria</th>
+                    <th>DOB Range Cutoff</th>
+                    <th>Description</th>
+                    <th>Candidates</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        No categories found. Click "Add / Configure Section" above to create one.
+                      </td>
+                    </tr>
+                  ) : (
+                    categories.map(cat => {
+                      const count = candidates.filter(c => c.section === cat.name).length;
+                      const hasAge = (cat.minAge !== null && cat.minAge !== undefined && cat.minAge !== '') ||
+                                     (cat.maxAge !== null && cat.maxAge !== undefined && cat.maxAge !== '');
+                      const hasDob = cat.minDob || cat.maxDob;
+
+                      return (
+                        <tr key={cat._id || cat.name}>
+                          <td>
+                            <span style={{
+                              padding: '0.15rem 0.45rem',
+                              borderRadius: '4px',
+                              background: 'rgba(255, 255, 255, 0.07)',
+                              fontSize: '0.8rem',
+                              color: 'var(--text-secondary)'
+                            }}>
+                              #{cat.order || 1}
+                            </span>
+                          </td>
+                          <td>
+                            <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{cat.name}</strong>
+                          </td>
+                          <td>
+                            {hasAge ? (
+                              <span style={{
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: 'var(--radius-sm)',
+                                background: 'rgba(59, 130, 246, 0.12)',
+                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                color: '#93c5fd',
+                                fontSize: '0.83rem',
+                                fontWeight: 500
+                              }}>
+                                🎂 {cat.minAge ?? 0} – {cat.maxAge ?? '∞'} yrs
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Any Age</span>
+                            )}
+                          </td>
+                          <td>
+                            {hasDob ? (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                {cat.minDob ? cat.minDob : 'Any'} → {cat.maxDob ? cat.maxDob : 'Any'}
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No DOB cutoff</span>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                              {cat.description || '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge-secondary" style={{ fontSize: '0.8rem' }}>
+                              {count} candidates
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setEditingCategory({ ...cat })}
+                                title="Edit category rules"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleDeleteCategory(cat._id, cat.name)}
+                                title="Delete category"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EDIT EVENT MODAL */}
       {editingEvent && (
         <div className="modal-overlay" onClick={() => setEditingEvent(null)}>
@@ -1946,6 +2421,117 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* EDIT CATEGORY MODAL */}
+      {editingCategory && (
+        <div className="modal-overlay" onClick={() => setEditingCategory(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Edit Section / Category: {editingCategory.name}</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setEditingCategory(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCategory}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label">Category / Section Name *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingCategory.name}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Minimum Age (years)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    className="form-input"
+                    value={editingCategory.minAge ?? ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, minAge: e.target.value === '' ? '' : Number(e.target.value) })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Maximum Age (years)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    className="form-input"
+                    value={editingCategory.maxAge ?? ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, maxAge: e.target.value === '' ? '' : Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Min DOB (Earliest)</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={editingCategory.minDob || ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, minDob: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Max DOB (Latest)</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={editingCategory.maxDob || ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, maxDob: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Sort Order</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editingCategory.order ?? 1}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, order: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Description / Note</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editingCategory.description || ''}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditingCategory(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  💾 Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* EDIT CANDIDATE MODAL */}
       {editingCandidate && (
         <div className="modal-overlay" onClick={() => setEditingCandidate(null)}>
@@ -1999,14 +2585,37 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Date of Birth *</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label" style={{ marginBottom: '0.2rem' }}>Date of Birth *</label>
+                    {editingCandidate.dob && (
+                      <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 500 }}>
+                        🎂 Age: {calculateAge(editingCandidate.dob)} yrs
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="date"
                     className="form-input"
                     value={editingCandidate.dob}
-                    onChange={(e) => setEditingCandidate({ ...editingCandidate, dob: e.target.value })}
+                    onChange={(e) => {
+                      const newDob = e.target.value;
+                      const detectedSec = getCategoryForDob(newDob, categories);
+                      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, detectedSec, editingCandidate.sex));
+                      const isStillValid = validForNew.some(ev => ev.name === editingCandidate.event);
+                      setEditingCandidate({
+                        ...editingCandidate,
+                        dob: newDob,
+                        section: detectedSec,
+                        event: isStillValid ? editingCandidate.event : (validForNew[0]?.name || '')
+                      });
+                    }}
                     required
                   />
+                  {editingCandidate.dob && (
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                      Auto-detected Category: <strong style={{ color: '#60a5fa' }}>{getCategoryForDob(editingCandidate.dob, categories)}</strong>
+                    </small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -2072,7 +2681,28 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Section *</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Section / Category *</label>
+                    {editingCandidate.dob && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }}
+                        onClick={() => {
+                          const autoSec = getCategoryForDob(editingCandidate.dob, categories);
+                          const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, autoSec, editingCandidate.sex));
+                          const isStillValid = validForNew.some(ev => ev.name === editingCandidate.event);
+                          setEditingCandidate({
+                            ...editingCandidate,
+                            section: autoSec,
+                            event: isStillValid ? editingCandidate.event : (validForNew[0]?.name || '')
+                          });
+                        }}
+                      >
+                        🔄 Auto-detect
+                      </button>
+                    )}
+                  </div>
                   <select
                     className="form-select"
                     value={editingCandidate.section}
@@ -2088,11 +2718,11 @@ export default function AdminPage() {
                     }}
                     required
                   >
-                    <option value="Sub-Junior">Sub-Junior</option>
-                    <option value="Junior">Junior</option>
-                    <option value="Senior">Senior</option>
-                    <option value="Super Senior">Super Senior</option>
-                    <option value="General">General</option>
+                    {(categories.length > 0 ? categories : DEFAULT_CATEGORY_RULES).map(cat => (
+                      <option key={cat._id || cat.name} value={cat.name}>
+                        {cat.name} {cat.minAge !== undefined && cat.maxAge !== undefined ? `(${cat.minAge}-${cat.maxAge} yrs)` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -2199,14 +2829,37 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Date of Birth *</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label" style={{ marginBottom: '0.2rem' }}>Date of Birth *</label>
+                    {adminCandidateForm.dob && (
+                      <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 500 }}>
+                        🎂 Age: {calculateAge(adminCandidateForm.dob)} yrs
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="date"
                     className="form-input"
                     value={adminCandidateForm.dob}
-                    onChange={(e) => setAdminCandidateForm({ ...adminCandidateForm, dob: e.target.value })}
+                    onChange={(e) => {
+                      const newDob = e.target.value;
+                      const detectedSec = getCategoryForDob(newDob, categories);
+                      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, detectedSec, adminCandidateForm.sex));
+                      const isStillValid = validForNew.some(ev => ev.name === adminCandidateForm.event);
+                      setAdminCandidateForm({
+                        ...adminCandidateForm,
+                        dob: newDob,
+                        section: detectedSec,
+                        event: isStillValid ? adminCandidateForm.event : (validForNew[0]?.name || '')
+                      });
+                    }}
                     required
                   />
+                  {adminCandidateForm.dob && (
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                      Auto-detected Category: <strong style={{ color: '#60a5fa' }}>{getCategoryForDob(adminCandidateForm.dob, categories)}</strong>
+                    </small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -2276,7 +2929,28 @@ export default function AdminPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Section *</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Section / Category *</label>
+                    {adminCandidateForm.dob && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }}
+                        onClick={() => {
+                          const autoSec = getCategoryForDob(adminCandidateForm.dob, categories);
+                          const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, autoSec, adminCandidateForm.sex));
+                          const isStillValid = validForNew.some(ev => ev.name === adminCandidateForm.event);
+                          setAdminCandidateForm({
+                            ...adminCandidateForm,
+                            section: autoSec,
+                            event: isStillValid ? adminCandidateForm.event : (validForNew[0]?.name || '')
+                          });
+                        }}
+                      >
+                        🔄 Auto-detect
+                      </button>
+                    )}
+                  </div>
                   <select
                     className="form-select"
                     value={adminCandidateForm.section}
@@ -2292,11 +2966,11 @@ export default function AdminPage() {
                     }}
                     required
                   >
-                    <option value="Sub-Junior">Sub-Junior</option>
-                    <option value="Junior">Junior</option>
-                    <option value="Senior">Senior</option>
-                    <option value="Super Senior">Super Senior</option>
-                    <option value="General">General</option>
+                    {(categories.length > 0 ? categories : DEFAULT_CATEGORY_RULES).map(cat => (
+                      <option key={cat._id || cat.name} value={cat.name}>
+                        {cat.name} {cat.minAge !== undefined && cat.maxAge !== undefined ? `(${cat.minAge}-${cat.maxAge} yrs)` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

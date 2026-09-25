@@ -115,3 +115,107 @@ export function getSectionEventName(baseName, section) {
   }
   return `${cleanName} (${cleanSec})`;
 }
+
+export const DEFAULT_CATEGORY_RULES = [
+  {
+    name: 'Sub-Junior',
+    minAge: 5,
+    maxAge: 9,
+    minDob: '2016-01-01',
+    maxDob: '2022-12-31',
+    description: 'Ages 5 to 9 (Classes 1 to 4)',
+    order: 1,
+  },
+  {
+    name: 'Junior',
+    minAge: 10,
+    maxAge: 12,
+    minDob: '2013-01-01',
+    maxDob: '2015-12-31',
+    description: 'Ages 10 to 12 (Classes 5 to 7)',
+    order: 2,
+  },
+  {
+    name: 'Senior',
+    minAge: 13,
+    maxAge: 15,
+    minDob: '2010-01-01',
+    maxDob: '2012-12-31',
+    description: 'Ages 13 to 15 (Classes 8 to 10)',
+    order: 3,
+  },
+  {
+    name: 'Super Senior',
+    minAge: 16,
+    maxAge: 18,
+    minDob: '2007-01-01',
+    maxDob: '2009-12-31',
+    description: 'Ages 16 to 18 (Plus One & Plus Two)',
+    order: 4,
+  },
+  {
+    name: 'General',
+    minAge: 0,
+    maxAge: 99,
+    minDob: '',
+    maxDob: '',
+    description: 'Open to all ages / Common events',
+    order: 5,
+  },
+];
+
+/**
+ * Calculates candidate age from date of birth (YYYY-MM-DD)
+ */
+export function calculateAge(dobString, referenceDate = new Date()) {
+  if (!dobString) return null;
+  const birthDate = new Date(dobString);
+  if (isNaN(birthDate.getTime())) return null;
+
+  let age = referenceDate.getFullYear() - birthDate.getFullYear();
+  const m = referenceDate.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && referenceDate.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+/**
+ * Automatically determines the Category/Section from Candidate DOB
+ */
+export function getCategoryForDob(dobString, categoryRules = DEFAULT_CATEGORY_RULES) {
+  if (!dobString) return null;
+  const age = calculateAge(dobString);
+  if (age === null) return null;
+
+  const rules = (categoryRules && categoryRules.length > 0) ? categoryRules : DEFAULT_CATEGORY_RULES;
+
+  // 1. Try exact DOB bounds first
+  for (const rule of rules) {
+    if (rule.name.toLowerCase() === 'general') continue;
+    const hasMinDob = Boolean(rule.minDob && rule.minDob.trim());
+    const hasMaxDob = Boolean(rule.maxDob && rule.maxDob.trim());
+
+    if (hasMinDob || hasMaxDob) {
+      const matchMin = !hasMinDob || dobString >= rule.minDob;
+      const matchMax = !hasMaxDob || dobString <= rule.maxDob;
+      if (matchMin && matchMax) {
+        return rule.name;
+      }
+    }
+  }
+
+  // 2. Try Age match
+  for (const rule of rules) {
+    if (rule.name.toLowerCase() === 'general') continue;
+    const minAge = rule.minAge !== undefined && rule.minAge !== '' ? Number(rule.minAge) : 0;
+    const maxAge = rule.maxAge !== undefined && rule.maxAge !== '' ? Number(rule.maxAge) : 99;
+    if (age >= minAge && age <= maxAge) {
+      return rule.name;
+    }
+  }
+
+  // 3. Fallback to General if present
+  const generalRule = rules.find(r => r.name.toLowerCase() === 'general');
+  return generalRule ? generalRule.name : 'General';
+}

@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { isEventAvailableForCandidate, formatEventCategories, formatEventGender } from '@/lib/eventUtils';
+import {
+  isEventAvailableForCandidate,
+  formatEventCategories,
+  formatEventGender,
+  calculateAge,
+  getCategoryForDob,
+  DEFAULT_CATEGORY_RULES,
+} from '@/lib/eventUtils';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -20,31 +27,37 @@ export default function RegisterPage() {
   const [mekhalas, setMekhalas] = useState([]);
   const [sakhas, setSakhas] = useState([]);
   const [events, setEvents] = useState([]);
+  const [categoryRules, setCategoryRules] = useState(DEFAULT_CATEGORY_RULES);
   const [regStatus, setRegStatus] = useState({ isOpen: true, endDate: null, endDateFormatted: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
   const [statusMessage, setStatusMessage] = useState(null);
   const [registeredCandidate, setRegisteredCandidate] = useState(null);
 
-  // Fetch Mekhalas, Sakhas, Events, and Registration Status
+  // Fetch Mekhalas, Sakhas, Events, Categories, and Registration Status
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [resM, resS, resE, resReg] = await Promise.all([
+        const [resM, resS, resE, resReg, resCat] = await Promise.all([
           fetch('/api/mekhalas'),
           fetch('/api/sakhas'),
           fetch('/api/events'),
           fetch('/api/registration-status'),
+          fetch('/api/categories'),
         ]);
 
         const dataM = await resM.json();
         const dataS = await resS.json();
         const dataE = await resE.json();
         const dataReg = await resReg.json();
+        const dataCat = await resCat.json();
 
         if (dataM.success) setMekhalas(dataM.data || []);
         if (dataS.success) setSakhas(dataS.data || []);
         if (dataReg.success) setRegStatus(dataReg);
+        if (dataCat.success && dataCat.data?.length > 0) {
+          setCategoryRules(dataCat.data);
+        }
         if (dataE.success) {
           const evList = dataE.data || [];
           setEvents(evList);
@@ -72,7 +85,18 @@ export default function RegisterPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'mekhala') {
+    if (name === 'dob') {
+      const detectedCategory = getCategoryForDob(value, categoryRules);
+      const newSec = detectedCategory || formData.section;
+      const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, newSec, formData.sex));
+      const currentValid = validForNew.some(ev => ev.name === formData.event);
+      setFormData(prev => ({
+        ...prev,
+        dob: value,
+        section: newSec,
+        event: currentValid ? prev.event : (validForNew[0]?.name || ''),
+      }));
+    } else if (name === 'mekhala') {
       setFormData(prev => ({
         ...prev,
         mekhala: value,
@@ -363,6 +387,24 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   required
                 />
+                {calculateAge(formData.dob) !== null && (
+                  <div style={{
+                    marginTop: '0.45rem',
+                    fontSize: '0.82rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap',
+                    background: 'rgba(6, 182, 212, 0.08)',
+                    border: '1px solid rgba(6, 182, 212, 0.25)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.35rem 0.65rem'
+                  }}>
+                    <span>🎂 <strong>Age:</strong> {calculateAge(formData.dob)} yrs</span>
+                    <span>•</span>
+                    <span>🎯 <strong>Category Auto-Selected:</strong> <strong style={{ color: '#fbbf24' }}>{formData.section}</strong></span>
+                  </div>
+                )}
               </div>
 
               {/* Phone Number */}
@@ -402,23 +444,57 @@ export default function RegisterPage() {
 
               {/* Section */}
               <div className="form-group">
-                <label className="form-label" htmlFor="section">
-                  Section <span className="req">*</span>
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="form-label" htmlFor="section" style={{ marginBottom: 0 }}>
+                    Section / Category <span className="req">*</span>
+                  </label>
+                  {formData.dob && (
+                    <button
+                      type="button"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--accent-cyan)',
+                        fontSize: '0.75rem',
+                        cursor: 'pointer',
+                        padding: 0,
+                        textDecoration: 'underline'
+                      }}
+                      onClick={() => {
+                        const detected = getCategoryForDob(formData.dob, categoryRules);
+                        if (detected) {
+                          const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, detected, formData.sex));
+                          const currentValid = validForNew.some(ev => ev.name === formData.event);
+                          setFormData(prev => ({
+                            ...prev,
+                            section: detected,
+                            event: currentValid ? prev.event : (validForNew[0]?.name || '')
+                          }));
+                        }
+                      }}
+                    >
+                      🔄 Re-detect from DOB
+                    </button>
+                  )}
+                </div>
                 <select
                   id="section"
                   name="section"
                   className="form-select"
+                  style={{ marginTop: '0.35rem' }}
                   value={formData.section}
                   onChange={handleChange}
                   required
                 >
-                  <option value="Sub-Junior">Sub-Junior</option>
-                  <option value="Junior">Junior</option>
-                  <option value="Senior">Senior</option>
-                  <option value="Super Senior">Super Senior</option>
-                  <option value="General">General</option>
+                  {categoryRules.map(cat => (
+                    <option key={cat._id || cat.name} value={cat.name}>
+                      {cat.name} {cat.minAge && cat.maxAge ? `(Ages ${cat.minAge}–${cat.maxAge})` : ''}
+                    </option>
+                  ))}
                 </select>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                  Auto-selected based on candidate's Date of Birth. You may also change it manually if necessary.
+                </div>
               </div>
 
               {/* Mekhala */}
