@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getEventCategories } from '@/lib/eventUtils';
-import PrintSheetModal from '@/components/PrintSheetModal';
 
 export default function DashboardPage() {
   const [data, setData] = useState(null);
@@ -16,23 +15,6 @@ export default function DashboardPage() {
   const [sakhaSearch, setSakhaSearch] = useState('');
   const [sakhaMekhalaFilter, setSakhaMekhalaFilter] = useState('ALL');
   const [refreshing, setRefreshing] = useState(false);
-
-  // Print modal state
-  const [printModalState, setPrintModalState] = useState({
-    isOpen: false,
-    type: 'result', // default to official result sheet on public portal
-    event: null,
-    candidates: [],
-  });
-
-  const openPrintModal = (type, eventObj, eventCandidates) => {
-    setPrintModalState({
-      isOpen: true,
-      type,
-      event: eventObj,
-      candidates: eventCandidates || [],
-    });
-  };
 
   async function loadResults() {
     try {
@@ -285,30 +267,8 @@ export default function DashboardPage() {
                         </div>
                         <h3 className="event-title">{event.name}</h3>
                       </div>
-                      <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          {event.candidates?.length || 0} participants
-                        </span>
-                        <div style={{ display: 'flex', gap: '0.35rem' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                            onClick={() => openPrintModal('stage', event, event.candidates || [])}
-                            title="Print Stage Manager Call Sheet"
-                          >
-                            📋 Stage
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                            onClick={() => openPrintModal('result', event, event.candidates || [])}
-                            title="Print Event Result Sheet"
-                          >
-                            🖨️ Result
-                          </button>
-                        </div>
+                      <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {event.candidates?.length || 0} participants
                       </div>
                     </div>
 
@@ -830,15 +790,6 @@ export default function DashboardPage() {
           )}
         </div>
       )}
-
-      {/* Print Sheet Modal (for Stage Managers and Official Results) */}
-      <PrintSheetModal
-        isOpen={printModalState.isOpen}
-        onClose={() => setPrintModalState(prev => ({ ...prev, isOpen: false }))}
-        initialType={printModalState.type}
-        event={printModalState.event}
-        candidates={printModalState.candidates}
-      />
     </div>
   );
 }
