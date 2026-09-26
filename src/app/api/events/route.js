@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import Event from '@/models/Event';
+import Candidate from '@/models/Candidate';
 import { getSectionEventName } from '@/lib/eventUtils';
 import { requireAdmin } from '@/lib/adminAuth';
 
@@ -186,6 +187,19 @@ export async function DELETE(request) {
     }
 
     await connectToDatabase();
+    const event = await Event.findById(id).select('name').lean();
+    if (!event) {
+      return NextResponse.json({ success: false, message: 'Event not found' }, { status: 404 });
+    }
+
+    const candidateCount = await Candidate.countDocuments({ event: event.name });
+    if (candidateCount > 0) {
+      return NextResponse.json({
+        success: false,
+        message: `Cannot delete "${event.name}" because ${candidateCount} candidate${candidateCount === 1 ? ' is' : 's are'} registered for it.`,
+      }, { status: 409 });
+    }
+
     await Event.findByIdAndDelete(id);
     return NextResponse.json({ success: true, message: 'Event deleted' });
   } catch (error) {

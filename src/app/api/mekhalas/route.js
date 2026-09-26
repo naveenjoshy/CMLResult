@@ -98,6 +98,33 @@ export async function DELETE(request) {
     }
 
     await connectToDatabase();
+    const mekhala = await Mekhala.findById(id).select('name').lean();
+    if (!mekhala) {
+      return NextResponse.json({ success: false, message: 'Mekhala not found' }, { status: 404 });
+    }
+
+    const [parishCount, candidateCount, parishSamples, candidateSamples] = await Promise.all([
+      Parish.countDocuments({ mekhala: mekhala.name }),
+      Candidate.countDocuments({ mekhala: mekhala.name }),
+      Parish.find({ mekhala: mekhala.name }).select('name').limit(5).lean(),
+      Candidate.find({ mekhala: mekhala.name }).select('name chestNo').limit(5).lean(),
+    ]);
+    if (parishCount > 0 || candidateCount > 0) {
+      const details = [];
+      if (parishCount > 0) {
+        const names = parishSamples.map(parish => parish.name).join(', ');
+        details.push(`${parishCount} child Parish${parishCount === 1 ? '' : 'es'}: ${names}${parishCount > parishSamples.length ? `, and ${parishCount - parishSamples.length} more` : ''}`);
+      }
+      if (candidateCount > 0) {
+        const names = candidateSamples.map(candidate => candidate.chestNo ? `${candidate.name} (${candidate.chestNo})` : candidate.name).join(', ');
+        details.push(`${candidateCount} registered candidate${candidateCount === 1 ? '' : 's'}: ${names}${candidateCount > candidateSamples.length ? `, and ${candidateCount - candidateSamples.length} more` : ''}`);
+      }
+      return NextResponse.json({
+        success: false,
+        message: `Cannot delete Mekhala "${mekhala.name}". ${details.join('; ')}. Reassign or remove these records first.`,
+      }, { status: 409 });
+    }
+
     await Mekhala.findByIdAndDelete(id);
     return NextResponse.json({ success: true, message: 'Mekhala deleted' });
   } catch (error) {

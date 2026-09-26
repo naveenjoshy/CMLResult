@@ -449,6 +449,11 @@ export default function AdminPage() {
   };
 
   const handleDeleteEvent = async (id, name) => {
+    const registeredCandidateCount = candidates.filter(candidate => candidate.event === name).length;
+    if (registeredCandidateCount > 0) {
+      notify('error', `Cannot delete "${name}" because ${registeredCandidateCount} candidate${registeredCandidateCount === 1 ? ' is' : 's are'} registered for it.`);
+      return;
+    }
     if (!confirm(`Delete event "${name}"?`)) return;
     try {
       const res = await fetch(`/api/events?id=${id}`, { method: 'DELETE' });
@@ -456,6 +461,8 @@ export default function AdminPage() {
       if (json.success) {
         setEvents(prev => prev.filter(e => e._id !== id));
         notify('success', 'Event deleted');
+      } else {
+        notify('error', json.message || 'Failed to delete event');
       }
     } catch (err) {
       notify('error', 'Failed to delete event');
@@ -523,6 +530,22 @@ export default function AdminPage() {
   };
 
   const handleDeleteMekhala = async (id, name) => {
+    const childParishes = parishes.filter(parish => parish.mekhala === name);
+    const registeredCandidates = candidates.filter(candidate => candidate.mekhala === name);
+    if (childParishes.length > 0 || registeredCandidates.length > 0) {
+      const parishNames = childParishes.slice(0, 5).map(parish => parish.name).join(', ');
+      const candidateNames = registeredCandidates.slice(0, 5).map(candidate =>
+        candidate.chestNo ? `${candidate.name} (${candidate.chestNo})` : candidate.name
+      ).join(', ');
+      const moreParishes = childParishes.length > 5 ? `, and ${childParishes.length - 5} more` : '';
+      const moreCandidates = registeredCandidates.length > 5 ? `, and ${registeredCandidates.length - 5} more` : '';
+      const reasons = [
+        childParishes.length > 0 && `${childParishes.length} child Parish${childParishes.length === 1 ? '' : 'es'}: ${parishNames}${moreParishes}`,
+        registeredCandidates.length > 0 && `${registeredCandidates.length} registered candidate${registeredCandidates.length === 1 ? '' : 's'}: ${candidateNames}${moreCandidates}`,
+      ].filter(Boolean);
+      notify('error', `Cannot delete Mekhala "${name}". ${reasons.join('; ')}. Reassign or remove these records first.`);
+      return;
+    }
     if (!confirm(`Delete Mekhala "${name}"?`)) return;
     try {
       const res = await fetch(`/api/mekhalas?id=${id}`, { method: 'DELETE' });
@@ -530,6 +553,8 @@ export default function AdminPage() {
       if (json.success) {
         setMekhalas(prev => prev.filter(m => m._id !== id));
         notify('success', 'Mekhala deleted');
+      } else {
+        notify('error', json.message || 'Failed to delete Mekhala');
       }
     } catch (err) {
       notify('error', 'Failed to delete Mekhala');
@@ -595,6 +620,15 @@ export default function AdminPage() {
   };
 
   const handleDeleteParish = async (id, name) => {
+    const registeredCandidates = candidates.filter(candidate => candidate.parish === name);
+    if (registeredCandidates.length > 0) {
+      const candidateNames = registeredCandidates.slice(0, 5).map(candidate =>
+        candidate.chestNo ? `${candidate.name} (${candidate.chestNo})` : candidate.name
+      ).join(', ');
+      const moreCandidates = registeredCandidates.length > 5 ? `, and ${registeredCandidates.length - 5} more` : '';
+      notify('error', `Cannot delete Parish "${name}". ${registeredCandidates.length} registered candidate${registeredCandidates.length === 1 ? '' : 's'}: ${candidateNames}${moreCandidates}. Reassign or remove these candidates first.`);
+      return;
+    }
     if (!confirm(`Delete Parish "${name}"?`)) return;
     try {
       const res = await fetch(`/api/parishes?id=${id}`, { method: 'DELETE' });
@@ -602,6 +636,8 @@ export default function AdminPage() {
       if (json.success) {
         setParishes(prev => prev.filter(s => s._id !== id));
         notify('success', 'Parish deleted');
+      } else {
+        notify('error', json.message || 'Failed to delete Parish');
       }
     } catch (err) {
       notify('error', 'Failed to delete Parish');
@@ -1793,6 +1829,15 @@ export default function AdminPage() {
                             ...ev,
                             gender: ev.gender || 'Both',
                             categories: getEventCategories(ev),
+                            points: {
+                              first: 5,
+                              second: 3,
+                              third: 1,
+                              gradeA: 5,
+                              gradeB: 3,
+                              gradeC: 1,
+                              ...(ev.points || {}),
+                            },
                           })}
                         >
                           ✏️ Edit
@@ -2015,6 +2060,12 @@ export default function AdminPage() {
                   ) : (
                     filteredMekhalas.map(m => {
                       const count = candidates.filter(c => c.mekhala === m.name).length;
+                      const childParishes = parishes.filter(parish => parish.mekhala === m.name);
+                      const deletionBlocked = count > 0 || childParishes.length > 0;
+                      const blockerDetails = [
+                        childParishes.length > 0 && `Parishes: ${childParishes.slice(0, 3).map(parish => parish.name).join(', ')}${childParishes.length > 3 ? `, +${childParishes.length - 3} more` : ''}`,
+                        count > 0 && `Candidates: ${candidates.filter(candidate => candidate.mekhala === m.name).slice(0, 3).map(candidate => candidate.chestNo ? `${candidate.name} (${candidate.chestNo})` : candidate.name).join(', ')}${count > 3 ? `, +${count - 3} more` : ''}`,
+                      ].filter(Boolean).join(' · ');
                       const isEditing = editingMekhala?._id === m._id;
                       return (
                         <tr key={m._id || m.name}>
@@ -2042,25 +2093,34 @@ export default function AdminPage() {
                                 </button>
                               </div>
                             ) : (
-                              <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => openRosterPrint(`Mekhala: ${m.name}`, candidates.filter(candidate => candidate.mekhala === m.name))}
-                                  title={`Print candidate list for ${m.name}`}
-                                >
-                                  Print List
-                                </button>
-                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingMekhala({ ...m })}>
-                                  ✏️ Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-danger btn-sm"
-                                  onClick={() => handleDeleteMekhala(m._id, m.name)}
-                                >
-                                  🗑️ Delete
-                                </button>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                                <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => openRosterPrint(`Mekhala: ${m.name}`, candidates.filter(candidate => candidate.mekhala === m.name))}
+                                    title={`Print candidate list for ${m.name}`}
+                                  >
+                                    Print List
+                                  </button>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingMekhala({ ...m })}>
+                                    ✏️ Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => handleDeleteMekhala(m._id, m.name)}
+                                    disabled={deletionBlocked}
+                                    title={deletionBlocked ? `Cannot delete while records are linked: ${blockerDetails}` : `Delete Mekhala ${m.name}`}
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </div>
+                                {deletionBlocked && (
+                                  <small style={{ maxWidth: '280px', color: '#fb7185', textAlign: 'right', lineHeight: 1.4 }}>
+                                    Delete blocked · {blockerDetails}
+                                  </small>
+                                )}
                               </div>
                             )}
                           </td>
@@ -2172,7 +2232,13 @@ export default function AdminPage() {
                     </tr>
                   ) : (
                     filteredParishes.map(s => {
-                      const count = candidates.filter(c => c.parish === s.name).length;
+                      const parishCandidates = candidates.filter(c => c.parish === s.name);
+                      const count = parishCandidates.length;
+                      const deletionBlocked = count > 0;
+                      const blockerDetails = parishCandidates.slice(0, 3)
+                        .map(candidate => candidate.chestNo ? `${candidate.name} (${candidate.chestNo})` : candidate.name)
+                        .join(', ');
+                      const fullBlockerDetails = `${count} registered candidate${count === 1 ? '' : 's'}: ${blockerDetails}${count > 3 ? `, +${count - 3} more` : ''}`;
                       const isEditing = editingParish?._id === s._id;
                       return (
                         <tr key={s._id || s.name}>
@@ -2223,25 +2289,34 @@ export default function AdminPage() {
                                 </button>
                               </div>
                             ) : (
-                              <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => openRosterPrint(`Parish: ${s.name}`, candidates.filter(candidate => candidate.parish === s.name))}
-                                  title={`Print candidate list for ${s.name}`}
-                                >
-                                  Print List
-                                </button>
-                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingParish({ ...s })}>
-                                  ✏️ Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-danger btn-sm"
-                                  onClick={() => handleDeleteParish(s._id, s.name)}
-                                >
-                                  🗑️ Delete
-                                </button>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                                <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => openRosterPrint(`Parish: ${s.name}`, candidates.filter(candidate => candidate.parish === s.name))}
+                                    title={`Print candidate list for ${s.name}`}
+                                  >
+                                    Print List
+                                  </button>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingParish({ ...s })}>
+                                    ✏️ Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => handleDeleteParish(s._id, s.name)}
+                                    disabled={deletionBlocked}
+                                    title={deletionBlocked ? `Cannot delete while candidates are registered: ${fullBlockerDetails}` : `Delete Parish ${s.name}`}
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </div>
+                                {deletionBlocked && (
+                                  <small style={{ maxWidth: '280px', color: '#fb7185', textAlign: 'right', lineHeight: 1.4 }}>
+                                    Delete blocked · {fullBlockerDetails}
+                                  </small>
+                                )}
                               </div>
                             )}
                           </td>
@@ -2672,6 +2747,98 @@ export default function AdminPage() {
                   />
                 </div>
               </div>
+
+              <fieldset className="certificate-mode-control" style={{ marginBottom: '1rem' }}>
+                <legend>Position Points</legend>
+                <label className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                  <span>1st Place</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={editingEvent.points?.first ?? 5}
+                    onChange={e => setEditingEvent(prev => ({
+                      ...prev,
+                      points: { ...prev.points, first: Number(e.target.value) },
+                    }))}
+                  />
+                </label>
+                <label className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                  <span>2nd Place</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={editingEvent.points?.second ?? 3}
+                    onChange={e => setEditingEvent(prev => ({
+                      ...prev,
+                      points: { ...prev.points, second: Number(e.target.value) },
+                    }))}
+                  />
+                </label>
+                <label className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                  <span>3rd Place</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={editingEvent.points?.third ?? 1}
+                    onChange={e => setEditingEvent(prev => ({
+                      ...prev,
+                      points: { ...prev.points, third: Number(e.target.value) },
+                    }))}
+                  />
+                </label>
+              </fieldset>
+
+              <fieldset className="certificate-mode-control" style={{ marginBottom: '1rem' }}>
+                <legend>Grade Points</legend>
+                <label className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                  <span>Grade A</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={editingEvent.points?.gradeA ?? 5}
+                    onChange={e => setEditingEvent(prev => ({
+                      ...prev,
+                      points: { ...prev.points, gradeA: Number(e.target.value) },
+                    }))}
+                  />
+                </label>
+                <label className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                  <span>Grade B</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={editingEvent.points?.gradeB ?? 3}
+                    onChange={e => setEditingEvent(prev => ({
+                      ...prev,
+                      points: { ...prev.points, gradeB: Number(e.target.value) },
+                    }))}
+                  />
+                </label>
+                <label className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                  <span>Grade C</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={editingEvent.points?.gradeC ?? 1}
+                    onChange={e => setEditingEvent(prev => ({
+                      ...prev,
+                      points: { ...prev.points, gradeC: Number(e.target.value) },
+                    }))}
+                  />
+                </label>
+              </fieldset>
 
               <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                 <button

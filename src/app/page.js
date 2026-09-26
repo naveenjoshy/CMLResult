@@ -125,6 +125,9 @@ export default function DashboardPage() {
   const hasPublishedResults = Boolean(stats.hasPublishedResults);
   const leadingMekhalas = stats.leadingMekhalas || (stats.leadingMekhala ? [stats.leadingMekhala] : []);
   const leadingParishes = stats.leadingParishes || (stats.leadingParish ? [stats.leadingParish] : []);
+  const eventCompletionPercent = stats.totalEvents
+    ? Math.round(((stats.completedEvents || 0) / stats.totalEvents) * 100)
+    : 0;
 
   // Filter events
   const filteredEvents = events.filter(ev => {
@@ -171,7 +174,6 @@ export default function DashboardPage() {
         <div className="glass-panel stat-card">
           <span className="stat-label">Total Candidates</span>
           <span className="stat-value">{stats.totalCandidates || 0}</span>
-          <span className="stat-sub">Across all registered events</span>
         </div>
 
         <div className="glass-panel stat-card purple">
@@ -179,10 +181,17 @@ export default function DashboardPage() {
           <span className="stat-value">
             {stats.completedEvents || 0} / {stats.totalEvents || 0}
           </span>
-          <span className="stat-sub">
-            {ongoingEvents.length > 0 ? `${ongoingEvents.length} ongoing now • ` : ''}
-            Events with results published
-          </span>
+          <div
+            className="event-progress-track"
+            role="progressbar"
+            aria-label="Completed events"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={eventCompletionPercent}
+            title={`${eventCompletionPercent}% of events completed`}
+          >
+            <div className="event-progress-fill" style={{ width: `${eventCompletionPercent}%` }} />
+          </div>
         </div>
 
         <div className="glass-panel stat-card gold">
@@ -190,18 +199,12 @@ export default function DashboardPage() {
           <span className="stat-value" style={{ color: '#fbbf24', fontSize: leadingMekhalas.length > 1 ? '1.15rem' : undefined, lineHeight: 1.3 }}>
             {leadingMekhalas.length > 0 ? leadingMekhalas.map(item => item.name).join(', ') : '—'}
           </span>
-          <span className="stat-sub">
-            {leadingMekhalas.length > 0 ? `${leadingMekhalas[0].totalPoints} Total Points` : 'Awaiting results'}
-          </span>
         </div>
 
         <div className="glass-panel stat-card emerald">
           <span className="stat-label">Leading Parish</span>
           <span className="stat-value" style={{ color: '#34d399', fontSize: leadingParishes.length > 1 ? '1.15rem' : undefined, lineHeight: 1.3 }}>
             {leadingParishes.length > 0 ? leadingParishes.map(item => item.name).join(', ') : '—'}
-          </span>
-          <span className="stat-sub">
-            {leadingParishes.length > 0 ? `${leadingParishes[0].totalPoints} Total Points` : 'Awaiting results'}
           </span>
         </div>
       </div>

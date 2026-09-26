@@ -95,6 +95,23 @@ export async function DELETE(request) {
       return NextResponse.json({ success: false, message: 'ID is required' }, { status: 400 });
     }
     await connectToDatabase();
+    const parish = await Parish.findById(id).select('name').lean();
+    if (!parish) {
+      return NextResponse.json({ success: false, message: 'Parish not found' }, { status: 404 });
+    }
+
+    const [candidateCount, candidateSamples] = await Promise.all([
+      Candidate.countDocuments({ parish: parish.name }),
+      Candidate.find({ parish: parish.name }).select('name chestNo').limit(5).lean(),
+    ]);
+    if (candidateCount > 0) {
+      const names = candidateSamples.map(candidate => candidate.chestNo ? `${candidate.name} (${candidate.chestNo})` : candidate.name).join(', ');
+      return NextResponse.json({
+        success: false,
+        message: `Cannot delete Parish "${parish.name}". ${candidateCount} registered candidate${candidateCount === 1 ? '' : 's'}: ${names}${candidateCount > candidateSamples.length ? `, and ${candidateCount - candidateSamples.length} more` : ''}. Reassign or remove these candidates first.`,
+      }, { status: 409 });
+    }
+
     await Parish.findByIdAndDelete(id);
     return NextResponse.json({ success: true, message: 'Parish deleted' });
   } catch (error) {
