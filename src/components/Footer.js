@@ -30,7 +30,7 @@ export default function Footer() {
       borderTop: '1px solid var(--border-subtle)',
       marginTop: '4rem',
     }}>
-      <p>© {new Date().getFullYear()} CML Results Management System • Database: <strong>CMLResult</strong></p>
+      <p>© {new Date().getFullYear()} CML Results Management System</p>
     </footer>
   );
 }

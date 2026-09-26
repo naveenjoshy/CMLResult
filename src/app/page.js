@@ -3,9 +3,29 @@
 import { useState, useEffect } from 'react';
 import { getEventCategories } from '@/lib/eventUtils';
 
+function RefreshCountdown({ deadline }) {
+  const [remainingMs, setRemainingMs] = useState(15000);
+
+  useEffect(() => {
+    if (!deadline) return;
+
+    const updateCountdown = () => setRemainingMs(Math.max(0, deadline - Date.now()));
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 50);
+    return () => clearInterval(timer);
+  }, [deadline]);
+
+  return (
+    <p style={{ color: '#f87171', fontSize: '1.15rem', fontWeight: 700, margin: '-1rem 0 2rem' }}>
+      Next refresh in {Math.ceil(remainingMs / 1000)}s
+    </p>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshDeadline, setRefreshDeadline] = useState(null);
   const [activeTab, setActiveTab] = useState('events'); // 'events', 'mekhala', 'parish', 'search'
   const [selectedEventFilter, setSelectedEventFilter] = useState('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
@@ -13,12 +33,10 @@ export default function DashboardPage() {
   const [mekhalaSearch, setMekhalaSearch] = useState('');
   const [parishSearch, setParishSearch] = useState('');
   const [parishMekhalaFilter, setParishMekhalaFilter] = useState('ALL');
-  const [refreshing, setRefreshing] = useState(false);
 
   async function loadResults() {
     try {
-      setRefreshing(true);
-      const res = await fetch('/api/results');
+      const res = await fetch('/api/results', { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setData(json.data);
@@ -27,13 +45,16 @@ export default function DashboardPage() {
       console.error('Failed to load results:', err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }
 
   useEffect(() => {
+    setRefreshDeadline(Date.now() + 15000);
     loadResults();
-    const interval = setInterval(loadResults, 20000); // Polling every 20s for live updates
+    const interval = setInterval(() => {
+      setRefreshDeadline(Date.now() + 15000);
+      loadResults();
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -108,17 +129,7 @@ export default function DashboardPage() {
           <span>🏆</span> Live Festival Results
         </div>
         <h1 className="hero-title">Festival Results & Leaderboard</h1>
-
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '2rem' }}>
-          <button 
-            type="button" 
-            onClick={loadResults} 
-            className="btn btn-secondary btn-sm"
-            disabled={refreshing}
-          >
-            {refreshing ? '🔄 Refreshing...' : '🔄 Refresh Result'}
-          </button>
-        </div>
+        <RefreshCountdown deadline={refreshDeadline} />
       </div>
 
       {/* Top Stats Overview */}

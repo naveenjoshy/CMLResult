@@ -11,7 +11,6 @@ export default function Navbar() {
   const [dbInfo, setDbInfo] = useState({
     connected: false,
     status: 'checking',
-    dbName: 'CMLResult',
     isConfigured: false,
   });
 
@@ -42,23 +41,19 @@ export default function Navbar() {
   }, [isAdminRoute]);
 
   useEffect(() => {
-    if (isPublicPage) return; // Do not check DB status on public shared pages
-
     async function checkDb() {
       try {
-        const res = await fetch('/api/db-status');
+        const res = await fetch('/api/db-status', { cache: 'no-store' });
         const data = await res.json();
         setDbInfo({
-          connected: data.connected,
+          connected: data.connected === true,
           status: data.status,
-          dbName: data.dbName || 'CMLResult',
           isConfigured: data.isConfigured,
         });
       } catch (err) {
         setDbInfo({
           connected: false,
           status: 'offline',
-          dbName: 'CMLResult',
           isConfigured: false,
         });
       }
@@ -66,7 +61,19 @@ export default function Navbar() {
     checkDb();
     const interval = setInterval(checkDb, 15000);
     return () => clearInterval(interval);
-  }, [isPublicPage]);
+  }, []);
+
+  const dbStatusBadge = (
+    <div
+      className={`nav-status ${dbInfo.connected ? '' : 'offline'}`}
+      title={`Database ${dbInfo.connected ? 'online' : 'offline'}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="status-dot"></span>
+      <span>{dbInfo.connected ? 'Online' : 'Offline'}</span>
+    </div>
+  );
 
   // Public View: Clean festival banner with subtle Admin access button
   if (isPublicPage) {
@@ -84,10 +91,12 @@ export default function Navbar() {
             </div>
           </div>
 
-          {/* Subtle Admin access button - always visible */}
-          <Link
-            href="/admin"
-            style={{
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            {dbStatusBadge}
+            {/* Subtle Admin access button - always visible */}
+            <Link
+              href="/admin"
+              style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.4rem',
@@ -100,20 +109,21 @@ export default function Navbar() {
               fontWeight: 500,
               textDecoration: 'none',
               transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-              e.currentTarget.style.color = '#fff';
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
-            }}
-          >
-            <span>⚙️</span> Admin
-          </Link>
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.color = '#fff';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+              }}
+            >
+              <span>⚙️</span> Admin
+            </Link>
+          </div>
         </div>
       </header>
     );
@@ -157,15 +167,7 @@ export default function Navbar() {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div 
-            className={`nav-status ${dbInfo.connected ? '' : 'offline'}`}
-            title={dbInfo.connected ? `Connected to MongoDB database: ${dbInfo.dbName}` : 'MongoDB connection unavailable'}
-          >
-            <span className="status-dot"></span>
-            <span>
-              {dbInfo.connected ? `DB: ${dbInfo.dbName}` : 'DB: Offline'}
-            </span>
-          </div>
+          {dbStatusBadge}
         </div>
       </div>
     </header>
