@@ -11,7 +11,7 @@ function assignPointsRanks(items) {
 
   return items.map((item, index) => {
     if (index === 0 || item.totalPoints !== previousPoints) {
-      currentRank = index + 1;
+      currentRank += 1;
     }
     previousPoints = item.totalPoints;
     return { ...item, rank: currentRank };

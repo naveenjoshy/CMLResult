@@ -781,11 +781,14 @@ button, input, select, textarea {
 /* Event Results Cards */
 .events-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
 }
 
 .event-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;

@@ -83,6 +83,7 @@ export default function DashboardPage() {
   const [selectedEventFilter, setSelectedEventFilter] = useState('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedEventName, setExpandedEventName] = useState(null);
 
   async function loadResults() {
     try {
@@ -127,6 +128,13 @@ export default function DashboardPage() {
 
   // Filter events
   const filteredEvents = events.filter(ev => {
+    const hasPublishedEventResults = (ev.candidates || []).some(candidate =>
+      (candidate.position && candidate.position !== 'None') ||
+      (candidate.grade && candidate.grade !== 'None') ||
+      Number(candidate.totalPoints || 0) > 0
+    );
+    if (!hasPublishedEventResults) return false;
+
     const matchesEvent = selectedEventFilter === 'ALL' || ev.name === selectedEventFilter;
     const evCats = getEventCategories(ev);
     const matchesCategory = selectedCategoryFilter === 'ALL' || evCats.includes(selectedCategoryFilter) || ev.category === selectedCategoryFilter;
@@ -314,14 +322,14 @@ export default function DashboardPage() {
           className={`tab-btn ${activeTab === 'mekhala' ? 'active' : ''}`}
           onClick={() => setActiveTab('mekhala')}
         >
-          🥇 Top Mekhala Leaderboard
+          🥇 Top Mekhala
         </button>
         <button 
           type="button"
           className={`tab-btn ${activeTab === 'parish' ? 'active' : ''}`}
           onClick={() => setActiveTab('parish')}
         >
-          🏢 Top Parish Leaderboard
+          🏢 Top Parish
         </button>
         <button 
           type="button"
@@ -378,8 +386,8 @@ export default function DashboardPage() {
           {filteredEvents.length === 0 ? (
             <div className="glass-panel empty-state">
               <div className="empty-icon">🎪</div>
-              <h3>No events match your criteria</h3>
-              <p>Try clearing your search or add events via the Admin panel.</p>
+              <h3>No published results match your criteria</h3>
+              <p>Events will appear here after candidate results are published.</p>
             </div>
           ) : (
             <div className="events-grid">
@@ -405,6 +413,16 @@ export default function DashboardPage() {
                       </div>
                       <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                         {event.candidates?.length || 0} participants
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ display: 'block', marginTop: '0.45rem', marginLeft: 'auto' }}
+                          aria-expanded={expandedEventName === event.name}
+                          aria-controls={`event-details-${String(event._id || event.name).replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+                          onClick={() => setExpandedEventName(current => current === event.name ? null : event.name)}
+                        >
+                          {expandedEventName === event.name ? 'Hide Detailed Results' : 'View Detailed Results'}
+                        </button>
                       </div>
                     </div>
 
@@ -516,6 +534,49 @@ export default function DashboardPage() {
                         </div>
                       )}
                     </div>
+                  {expandedEventName === event.name && (
+                    <section
+                      id={`event-details-${String(event._id || event.name).replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+                      className="table-wrapper"
+                      style={{ marginTop: '1rem' }}
+                      aria-label={`Detailed results for ${event.name}`}
+                    >
+                      <table className="custom-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '64px' }}>Sl No</th>
+                            <th>Chest No</th>
+                            <th>Name</th>
+                            <th>Mekhala</th>
+                            <th>Parish</th>
+                            <th>Position</th>
+                            <th>Grade</th>
+                            <th style={{ textAlign: 'right' }}>Points</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(event.candidates || []).length === 0 ? (
+                            <tr>
+                              <td colSpan="8" style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--text-muted)' }}>
+                                No candidates registered for this event.
+                              </td>
+                            </tr>
+                          ) : event.candidates.map((candidate, index) => (
+                            <tr key={candidate._id || `${candidate.name}-${index}`}>
+                              <td>{index + 1}</td>
+                              <td>{candidate.chestNo || ''}</td>
+                              <td><strong style={{ color: '#fff' }}>{candidate.name}</strong></td>
+                              <td>{candidate.mekhala || '—'}</td>
+                              <td>{candidate.parish || '—'}</td>
+                              <td>{candidate.position && candidate.position !== 'None' ? candidate.position : 'Not placed'}</td>
+                              <td>{candidate.grade && candidate.grade !== 'None' ? candidate.grade : '—'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(candidate.totalPoints) || 0} pts</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </section>
+                  )}
                   </div>
                 );
               })}
