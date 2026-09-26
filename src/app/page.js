@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const filteredTopMekhalas = topMekhalas.filter(m => {
     if (!mekhalaSearch.trim()) return true;
     const q = mekhalaSearch.toLowerCase();
-    return m.name.toLowerCase().includes(q) || (m.code && m.code.toLowerCase().includes(q));
+    return m.name.toLowerCase().includes(q);
   });
 
   // Unique Mekhalas for Parish filter
@@ -558,7 +558,7 @@ export default function DashboardPage() {
               <span className="search-icon">🔍</span>
               <input
                 type="text"
-                placeholder="Search mekhala by name or short code..."
+                placeholder="Search mekhala by name..."
                 className="form-input"
                 value={mekhalaSearch}
                 onChange={(e) => setMekhalaSearch(e.target.value)}
@@ -582,6 +582,7 @@ export default function DashboardPage() {
                 <tr>
                   <th style={{ width: '80px' }}>Rank</th>
                   <th>Mekhala Name</th>
+                  <th>Parishes</th>
                   <th>Candidates</th>
                   <th>🥇 1st</th>
                   <th>🥈 2nd</th>
@@ -593,13 +594,13 @@ export default function DashboardPage() {
               <tbody>
                 {!hasPublishedResults ? (
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                       Mekhala standings will appear after results are published.
                     </td>
                   </tr>
                 ) : filteredTopMekhalas.length === 0 ? (
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                       No mekhalas match your search "{mekhalaSearch}".
                     </td>
                   </tr>
@@ -615,8 +616,8 @@ export default function DashboardPage() {
                       </td>
                       <td>
                         <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{m.name}</strong>
-                        {m.code && <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>({m.code})</span>}
                       </td>
+                      <td>{m.parishCount}</td>
                       <td>{m.candidateCount}</td>
                       <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{m.firsts}</span></td>
                       <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{m.seconds}</span></td>

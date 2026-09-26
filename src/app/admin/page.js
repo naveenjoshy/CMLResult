@@ -106,7 +106,7 @@ export default function AdminPage() {
   const [editingEvent, setEditingEvent] = useState(null);
 
   // Mekhala & Parish form states
-  const [newMekhala, setNewMekhala] = useState({ name: '', code: '' });
+  const [newMekhala, setNewMekhala] = useState({ name: '' });
   const [editingMekhala, setEditingMekhala] = useState(null);
   const [newParish, setNewParish] = useState({ name: '', mekhala: '' });
   const [editingParish, setEditingParish] = useState(null);
@@ -156,7 +156,10 @@ export default function AdminPage() {
       if (dataE.success) {
         setEvents(dataE.data || []);
         if (dataE.data?.length > 0 && !selectedEventName) {
-          setSelectedEventName(dataE.data[0].name);
+          const [firstEvent] = [...dataE.data].sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          );
+          setSelectedEventName(firstEvent.name);
         }
       }
       if (dataC.success) setCandidates(dataC.data || []);
@@ -408,7 +411,7 @@ export default function AdminPage() {
       if (json.success) {
         setMekhalas(prev => [...prev, json.data]);
         notify('success', `Mekhala "${newMekhala.name}" added!`);
-        setNewMekhala({ name: '', code: '' });
+        setNewMekhala({ name: '' });
       } else {
         notify('error', json.message || 'Failed to add Mekhala');
       }
@@ -432,7 +435,6 @@ export default function AdminPage() {
         body: JSON.stringify({
           id: editingMekhala._id,
           name: editingMekhala.name,
-          code: editingMekhala.code || '',
         }),
       });
       const json = await res.json();
@@ -811,7 +813,10 @@ export default function AdminPage() {
   }
 
   // Selected event object for result entry
-  const selectedEvent = events.find(e => e.name === selectedEventName) || events[0];
+  const sortedEvents = [...events].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  );
+  const selectedEvent = sortedEvents.find(e => e.name === selectedEventName) || sortedEvents[0];
   const candidatesForSelectedEvent = selectedEvent
     ? candidates.filter(c => c.event === selectedEvent.name)
     : [];
@@ -819,7 +824,7 @@ export default function AdminPage() {
     ...sectionOptions,
     ...events.flatMap(event => getEventCategories(event)),
   ]));
-  const filteredManagedEvents = events.filter(event => {
+  const filteredManagedEvents = sortedEvents.filter(event => {
     const matchesName = !managedEventNameSearch.trim() ||
       (event.name || '').toLowerCase().includes(managedEventNameSearch.trim().toLowerCase());
     const matchesCategory = managedEventCategoryFilter === 'ALL' ||
@@ -851,8 +856,7 @@ export default function AdminPage() {
     if (!mekhalaSearch.trim()) return true;
     const q = mekhalaSearch.toLowerCase();
     return (
-      m.name.toLowerCase().includes(q) ||
-      (m.code && m.code.toLowerCase().includes(q))
+      m.name.toLowerCase().includes(q)
     );
   });
 
@@ -995,7 +999,7 @@ export default function AdminPage() {
                   value={selectedEventName}
                   onChange={(e) => setSelectedEventName(e.target.value)}
                 >
-                  {events.map(ev => (
+                  {sortedEvents.map(ev => (
                     <option key={ev._id || ev.name} value={ev.name}>
                       {ev.name} ({ev.status || 'Upcoming'})
                     </option>
@@ -1886,17 +1890,6 @@ export default function AdminPage() {
                 />
               </div>
 
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label className="form-label">Short Code (Optional)</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. NZ, WYD"
-                  value={newMekhala.code}
-                  onChange={(e) => setNewMekhala({ ...newMekhala, code: e.target.value })}
-                />
-              </div>
-
               <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
                 ➕ Add Mekhala
               </button>
@@ -1909,7 +1902,7 @@ export default function AdminPage() {
                 <span className="search-icon">🔍</span>
                 <input
                   type="text"
-                  placeholder="Search mekhala by name or short code..."
+                  placeholder="Search mekhala by name..."
                   className="form-input"
                   value={mekhalaSearch}
                   onChange={(e) => setMekhalaSearch(e.target.value)}
@@ -1931,7 +1924,6 @@ export default function AdminPage() {
                 <thead>
                   <tr>
                     <th>Mekhala Name</th>
-                    <th>Short Code</th>
                     <th>Registered Candidates</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -1939,7 +1931,7 @@ export default function AdminPage() {
                 <tbody>
                   {filteredMekhalas.length === 0 ? (
                     <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      <td colSpan="3" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                         No mekhalas match your search "{mekhalaSearch}".
                       </td>
                     </tr>
@@ -1960,16 +1952,6 @@ export default function AdminPage() {
                             ) : (
                               <strong style={{ color: '#fff' }}>{m.name}</strong>
                             )}
-                          </td>
-                          <td>
-                            {isEditing ? (
-                              <input
-                                className="form-input"
-                                aria-label="Mekhala short code"
-                                value={editingMekhala.code || ''}
-                                onChange={(e) => setEditingMekhala({ ...editingMekhala, code: e.target.value })}
-                              />
-                            ) : m.code || '—'}
                           </td>
                           <td>{count}</td>
                           <td style={{ textAlign: 'right' }}>

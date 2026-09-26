@@ -20,7 +20,7 @@ export async function POST(request) {
     const unauthorized = requireAdmin(request);
     if (unauthorized) return unauthorized;
     const body = await request.json();
-    const { name, code } = body;
+    const { name } = body;
 
     if (!name || name.trim() === '') {
       return NextResponse.json({ success: false, message: 'Name is required' }, { status: 400 });
@@ -33,10 +33,7 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: 'Mekhala already exists' }, { status: 409 });
     }
 
-    const created = await Mekhala.create({
-      name: trimmedName,
-      code: (code || '').trim(),
-    });
+    const created = await Mekhala.create({ name: trimmedName });
     return NextResponse.json({ success: true, data: created, source: 'mongodb' }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
@@ -48,9 +45,8 @@ export async function PUT(request) {
     const unauthorized = requireAdmin(request);
     if (unauthorized) return unauthorized;
     const body = await request.json();
-    const { id, name, code } = body;
+    const { id, name } = body;
     const trimmedName = String(name || '').trim();
-    const trimmedCode = String(code || '').trim();
 
     if (!id || !trimmedName) {
       return NextResponse.json({ success: false, message: 'Mekhala ID and name are required' }, { status: 400 });
@@ -73,7 +69,7 @@ export async function PUT(request) {
     const previousName = current.name;
     const updated = await Mekhala.findByIdAndUpdate(
       id,
-      { name: trimmedName, code: trimmedCode },
+      { name: trimmedName },
       { new: true, runValidators: true }
     );
 

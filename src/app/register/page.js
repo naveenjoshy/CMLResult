@@ -547,7 +547,7 @@ export default function RegisterPage() {
                   <option value="">-- Select Mekhala --</option>
                   {mekhalas.map(m => (
                     <option key={m._id || m.name} value={m.name}>
-                      {m.name} {m.code ? `(${m.code})` : ''}
+                      {m.name}
                     </option>
                   ))}
                 </select>

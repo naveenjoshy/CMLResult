@@ -7,10 +7,6 @@ const MekhalaSchema = new mongoose.Schema({
     unique: true,
     trim: true,
   },
-  code: {
-    type: String,
-    trim: true,
-  },
   createdAt: {
     type: Date,
     default: Date.now,

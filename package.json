@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "migrate:parish": "node migrations/rename-sakha-to-parish.mjs"
+    "lint": "next lint"
   },
   "dependencies": {
     "mongoose": "^8.9.5",

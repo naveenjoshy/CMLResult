@@ -11,7 +11,6 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
   mekhalas.forEach(m => {
     mekhalaMap[m.name] = {
       name: m.name,
-      code: m.code || '',
       totalPoints: 0,
       firsts: 0,
       seconds: 0,
@@ -25,7 +24,11 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
 
   // Parish points map
   const parishMap = {};
+  const parishCountsByMekhala = {};
   parishes.forEach(s => {
+    if (s.mekhala) {
+      parishCountsByMekhala[s.mekhala] = (parishCountsByMekhala[s.mekhala] || 0) + 1;
+    }
     parishMap[s.name] = {
       name: s.name,
       mekhala: s.mekhala,
@@ -61,7 +64,6 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
       if (!mekhalaMap[cand.mekhala]) {
         mekhalaMap[cand.mekhala] = {
           name: cand.mekhala,
-          code: '',
           totalPoints: 0,
           firsts: 0,
           seconds: 0,
@@ -128,7 +130,11 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
     if (b.firsts !== a.firsts) return b.firsts - a.firsts;
     return b.seconds - a.seconds;
-  }).map((item, idx) => ({ ...item, rank: idx + 1 }));
+  }).map((item, idx) => ({
+    ...item,
+    rank: idx + 1,
+    parishCount: parishCountsByMekhala[item.name] || 0,
+  }));
 
   const topParishes = Object.values(parishMap).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;

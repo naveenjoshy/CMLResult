@@ -12,7 +12,7 @@ Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and 
 - Ongoing-event section with stage, section, eligibility, and participant details.
 - Results by event, including event status, point scheme, and first-, second-, and third-place results with candidate details, grades, and points.
 - Mekhala and Parish leaderboards with podiums, ranks, points, candidate counts, medal totals, and grade counts. Parish standings include their parent Mekhala.
-- Search and filters for events by name, section, candidate, or chest number; search Mekhalas by name or code; filter Parishes by name or parent Mekhala; and search candidate scorecards by name, chest number, house, Parish, or Mekhala.
+- Search and filters for events by name, section, candidate, or chest number; search Mekhalas by name; filter Parishes by name or parent Mekhala; and search candidate scorecards by name, chest number, house, Parish, or Mekhala.
 - Results refresh automatically every 20 seconds, with a manual refresh option.
 
 ### Candidate registration (`/register`)
@@ -29,7 +29,7 @@ Built with **Next.js 15 (App Router)**, **React 19**, **MongoDB/Mongoose**, and 
 - **Results and scoring:** assign first, second, or third place and grades A, B, or C; points recalculate for candidates and their Mekhalas and Parishes. Update event status between Upcoming, In Progress, and Completed.
 - **Event management:** add, edit, and delete events; configure eligible sections, gender, description, stage details, status, and placement/grade point values. Choose combined male/female eligibility or create separate Male and Female events, with candidates shown only the matching event. Create separate events per selected section or combine sections into one event.
 - **Candidate management:** search, add, edit, and delete candidates. Admin registration bypasses the public registration deadline. Issue sequential `CML-101`-style chest numbers to candidates who do not have one, or edit a candidate's number directly.
-- **Mekhala and Parish management:** add and delete Mekhalas and Parishes, assign Parishes to a parent Mekhala, and view candidate counts.
+- **Mekhala and Parish management:** add, edit, and delete Mekhalas and Parishes, assign Parishes to a parent Mekhala, and view candidate counts.
 - **Section and DOB rules:** add, edit, and delete sections; configure DOB ranges, descriptions, and display order; preview the section assigned to a test DOB.
 - **Print documents:** preview and print a stage-manager call sheet sorted by chest number or an official result sheet sorted by placement and points.
 - **Winner posters:** generate downloadable, high-resolution result posters in portrait post, story, or square formats; copy a prepared social caption and use the available share action.
@@ -77,18 +77,10 @@ npm run start
 
 ## Database initialization
 
-After upgrading an existing database, rename the Sakha collection and candidate field to Parish:
-
-```bash
-npm run migrate:parish
-```
-
-The migration renames `sakhas` to `parishes` and `candidates.sakha` to `candidates.parish` without deleting documents. It is safe to rerun.
-
-With `MONGODB_URI` configured, the optional initializer creates the core collections and inserts starter Mekhalas, Parishes, events, and candidates when those collections are empty:
+With `MONGODB_URI` configured, the initializer creates any missing application collections and ensures the unique indexes for categories, certificate designs, Mekhalas, and Parishes. It does not insert, update, or delete documents:
 
 ```bash
 node scripts/init-db.mjs
 ```
 
-The initializer is optional; the application can create and manage its data through the admin portal.
+The initializer is optional; the application can create and manage its data through the admin portal. It is the only database initialization script; data migrations and one-off data changes should be handled separately.
