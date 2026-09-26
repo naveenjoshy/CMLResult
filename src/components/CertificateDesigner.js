@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import BrandBanner from '@/components/BrandBanner';
+import BrandLogo from '@/components/BrandLogo';
 
 const CERTIFICATE_FIELDS = [
   { key: 'name', label: 'Name' },
@@ -47,6 +49,23 @@ function getCandidateId(candidate) {
   return String(candidate._id || candidate.id || candidate.name);
 }
 
+function CertificateBranding({ className, includeLogo, includeBanner, includeSecondaryBanner }) {
+  if (!includeLogo && !includeBanner && !includeSecondaryBanner) return null;
+
+  return (
+    <div className={className}>
+      {includeLogo && <BrandLogo className="certificate-branding-logo" />}
+      {(includeBanner || includeSecondaryBanner) && (
+        <BrandBanner
+          className="certificate-branding-banners"
+          showPrimary={includeBanner}
+          showSecondary={includeSecondaryBanner}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function CertificateDesigner({ candidates = [], events = [], initialEventName, initialCandidateIds }) {
   const previewRef = useRef(null);
   const dragStartRef = useRef(null);
@@ -61,6 +80,9 @@ export default function CertificateDesigner({ candidates = [], events = [], init
   const [loadingDesign, setLoadingDesign] = useState(true);
   const [savingDesign, setSavingDesign] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [includeCertificateLogo, setIncludeCertificateLogo] = useState(false);
+  const [includeCertificateBanner, setIncludeCertificateBanner] = useState(false);
+  const [includeCertificateSecondaryBanner, setIncludeCertificateSecondaryBanner] = useState(false);
 
   useEffect(() => {
     if (!initialEventName) return;
@@ -448,6 +470,21 @@ export default function CertificateDesigner({ candidates = [], events = [], init
               Print Selected ({selectedCandidates.length})
             </button>
           </div>
+          <fieldset className="certificate-mode-control">
+            <legend>Optional certificate branding</legend>
+            <label>
+              <input type="checkbox" checked={includeCertificateLogo} onChange={event => setIncludeCertificateLogo(event.target.checked)} />
+              Logo
+            </label>
+            <label>
+              <input type="checkbox" checked={includeCertificateBanner} onChange={event => setIncludeCertificateBanner(event.target.checked)} />
+              Main banner
+            </label>
+            <label>
+              <input type="checkbox" checked={includeCertificateSecondaryBanner} onChange={event => setIncludeCertificateSecondaryBanner(event.target.checked)} />
+              Secondary banner
+            </label>
+          </fieldset>
           <label className="form-group">
             <span className="form-label">Event</span>
             <select
@@ -523,6 +560,12 @@ export default function CertificateDesigner({ candidates = [], events = [], init
           onPointerUp={clearDrag}
           onPointerCancel={clearDrag}
         >
+          <CertificateBranding
+            className="certificate-preview-branding"
+            includeLogo={includeCertificateLogo}
+            includeBanner={includeCertificateBanner}
+            includeSecondaryBanner={includeCertificateSecondaryBanner}
+          />
           {design.title && <div className="certificate-preview-title">{design.title}</div>}
           {design.subtitle && <div className="certificate-preview-subtitle">{design.subtitle}</div>}
           {design.fields.map(field => (
@@ -560,6 +603,12 @@ export default function CertificateDesigner({ candidates = [], events = [], init
             className={`certificate-print-page ${design.mode === 'blank' ? 'blank' : 'uploaded'}`}
             style={design.mode === 'uploaded' && design.backgroundImage ? { backgroundImage: `url("${design.backgroundImage}")` } : undefined}
           >
+            <CertificateBranding
+              className="certificate-print-branding"
+              includeLogo={includeCertificateLogo}
+              includeBanner={includeCertificateBanner}
+              includeSecondaryBanner={includeCertificateSecondaryBanner}
+            />
             {design.title && <div className="certificate-print-title">{design.title}</div>}
             {design.subtitle && <div className="certificate-print-subtitle">{design.subtitle}</div>}
             {design.fields.map(field => (

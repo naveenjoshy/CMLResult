@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function Navbar() {
   const pathname = usePathname();
   const isAdminRoute = pathname.startsWith('/admin');
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
+  const [isRefreshingAdminData, setIsRefreshingAdminData] = useState(false);
   const [dbInfo, setDbInfo] = useState({
     connected: false,
     status: 'checking',
@@ -39,6 +41,12 @@ export default function Navbar() {
       window.removeEventListener('cml-admin-session-changed', checkAdminSession);
     };
   }, [isAdminRoute]);
+
+  useEffect(() => {
+    const handleRefreshComplete = () => setIsRefreshingAdminData(false);
+    window.addEventListener('cml-admin-refresh-completed', handleRefreshComplete);
+    return () => window.removeEventListener('cml-admin-refresh-completed', handleRefreshComplete);
+  }, []);
 
   useEffect(() => {
     async function checkDb() {
@@ -75,6 +83,21 @@ export default function Navbar() {
     </div>
   );
 
+  const handleAdminLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to clear admin session:', err);
+    }
+    window.dispatchEvent(new Event('cml-admin-session-changed'));
+    window.location.assign('/admin');
+  };
+
+  const handleAdminRefresh = () => {
+    setIsRefreshingAdminData(true);
+    window.dispatchEvent(new Event('cml-admin-refresh-requested'));
+  };
+
   // Public View: Clean festival banner with subtle Admin access button
   if (isPublicPage) {
     return (
@@ -82,13 +105,7 @@ export default function Navbar() {
         <div className="container nav-container" style={{ padding: '0.85rem 1rem' }}>
           {/* Brand - left aligned on public */}
           <div className="nav-brand" style={{ cursor: 'default' }}>
-            <div className="brand-badge" style={{ animation: 'none' }}>🏆</div>
-            <div>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em' }}>CML Result</span>
-              <span style={{ fontSize: '0.75rem', display: 'block', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                Cherupushpam Mission League • Official Fest Portal
-              </span>
-            </div>
+            <BrandLogo className="nav-brand-logo" />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
@@ -135,13 +152,7 @@ export default function Navbar() {
     <header className="navbar">
       <div className="container nav-container">
         <Link href="/" className="nav-brand">
-          <div className="brand-badge">🏆</div>
-          <div>
-            <span>CML Result</span>
-            <span style={{ fontSize: '0.75rem', display: 'block', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
-              Admin View
-            </span>
-          </div>
+          <BrandLogo className="nav-brand-logo" />
         </Link>
 
         {(!isAdminRoute || adminAuthenticated) && (
@@ -168,6 +179,21 @@ export default function Navbar() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {dbStatusBadge}
+          {isAdminRoute && adminAuthenticated && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleAdminRefresh}
+              disabled={isRefreshingAdminData}
+            >
+              {isRefreshingAdminData ? 'Refreshing...' : 'Refresh Data'}
+            </button>
+          )}
+          {isAdminRoute && adminAuthenticated && (
+            <button type="button" className="btn btn-danger btn-sm" onClick={handleAdminLogout}>
+              Logout
+            </button>
+          )}
         </div>
       </div>
     </header>

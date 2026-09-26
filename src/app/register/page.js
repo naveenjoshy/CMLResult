@@ -12,6 +12,8 @@ import {
   getCategoryForDob,
   DEFAULT_CATEGORY_RULES,
 } from '@/lib/eventUtils';
+import BrandBanner from '@/components/BrandBanner';
+import DateInput from '@/components/DateInput';
 
 function isRegistrationEventAvailable(event, section, sex) {
   const groupEvent = isGroupEvent(event);
@@ -196,8 +198,9 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!formData.phone.trim()) {
-      setStatusMessage({ type: 'error', text: 'Please enter a Contact Phone Number.' });
+    const normalizedPhone = formData.phone.trim();
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      setStatusMessage({ type: 'error', text: 'Phone number must contain exactly 10 digits.' });
       setLoading(false);
       return;
     }
@@ -220,6 +223,7 @@ export default function RegisterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          phone: normalizedPhone,
           section: isGroupRegistration && !formData.dob ? 'Group' : formData.section,
           dob: formData.dob || '',
         }),
@@ -255,11 +259,9 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="container" style={{ paddingTop: '2.5rem', paddingBottom: '3rem' }}>
+    <div className="container" style={{ paddingTop: 0, paddingBottom: '3rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-        <div className="hero-pill">
-          <span>✨</span> Official Registration Portal
-        </div>
+        <BrandBanner className="hero-brand-title" />
         <h1 className="hero-title" style={{ fontSize: '2.4rem' }}>Candidate Registration</h1>
 
         {regStatus.isOpen && regStatus.endDateFormatted && (
@@ -278,6 +280,15 @@ export default function RegisterPage() {
             <span>⏳</span> Registration Deadline: <strong>{regStatus.endDateFormatted}</strong>
           </div>
         )}
+        <p style={{
+          color: '#ef4444',
+          fontSize: '0.88rem',
+          lineHeight: 1.5,
+          maxWidth: '680px',
+          margin: '0.75rem auto 0',
+        }}>
+          For group events, enter one candidate per registration. Date of birth is optional.
+        </p>
       </div>
 
       {/* REGISTRATION CLOSED SCREEN */}
@@ -423,14 +434,14 @@ export default function RegisterPage() {
                     ? <span style={{ color: 'var(--text-muted)', fontWeight: 'normal' }}>(optional for Group events)</span>
                     : <span className="req">*</span>}
                 </label>
-                <input
+                <DateInput
                   id="dob"
-                  type="date"
                   name="dob"
                   className="form-input"
                   value={formData.dob}
-                  max={new Date().toISOString().split('T')[0]}
-                  onChange={handleChange}
+                  maxDate={new Date().toISOString().split('T')[0]}
+                  onDateChange={value => handleChange({ target: { name: 'dob', value } })}
+                  required={!dobOptional}
                 />
                 {formData.dob && (
                   <div style={{
@@ -458,6 +469,8 @@ export default function RegisterPage() {
                 <input
                   id="phone"
                   type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
                   name="phone"
                   className="form-input"
                   value={formData.phone}

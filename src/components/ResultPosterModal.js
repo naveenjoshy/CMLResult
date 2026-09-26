@@ -2,14 +2,26 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { formatEventCategories, formatEventGender } from '@/lib/eventUtils';
+import { BRAND_BANNER_SRC, SECONDARY_BANNER_SRC } from '@/lib/branding';
 
 export default function ResultPosterModal({ isOpen, onClose, event, candidates = [] }) {
   const canvasRef = useRef(null);
+  const [brandBanner, setBrandBanner] = useState(null);
+  const [secondaryBanner, setSecondaryBanner] = useState(null);
   const [format, setFormat] = useState('post'); // 'post' (4:5), 'story' (9:16), 'square' (1:1)
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    const bannerImage = new window.Image();
+    const secondaryImage = new window.Image();
+    bannerImage.onload = () => setBrandBanner(bannerImage);
+    secondaryImage.onload = () => setSecondaryBanner(secondaryImage);
+    bannerImage.src = BRAND_BANNER_SRC;
+    secondaryImage.src = SECONDARY_BANNER_SRC;
+  }, []);
 
   // Group winners
   const firstWinners = candidates.filter(c => c.position === 'First');
@@ -46,7 +58,7 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
   // Render high-res Canvas poster
   const drawPoster = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !event) return;
+    if (!canvas || !event || !brandBanner || !secondaryBanner) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -137,25 +149,14 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
 
     let curY = format === 'story' ? 120 : (format === 'square' ? 55 : 75);
 
-    // Top Pill: Cherupushpa Mission League
-    ctx.fillStyle = 'rgba(251, 191, 36, 0.12)';
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 1.5;
-    const badgeW = 440;
-    roundRect(ctx, W / 2 - badgeW / 2, curY, badgeW, 34, 17, true, true);
+    const bannerWidth = format === 'square' ? 420 : 580;
+    const bannerHeight = bannerWidth * brandBanner.height / brandBanner.width;
+    const secondaryWidth = bannerWidth * 0.72;
+    const secondaryHeight = secondaryWidth * secondaryBanner.height / secondaryBanner.width;
+    ctx.drawImage(brandBanner, (W - bannerWidth) / 2, curY, bannerWidth, bannerHeight);
+    ctx.drawImage(secondaryBanner, (W - secondaryWidth) / 2, curY + bannerHeight + 4, secondaryWidth, secondaryHeight);
 
-    ctx.fillStyle = '#fef08a';
-    ctx.font = 'bold 13px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText('CHERUPUSHPAM MISSION LEAGUE (CML)', W / 2, curY + 22);
-
-    curY += format === 'story' ? 70 : (format === 'square' ? 48 : 55);
-
-    // Fest Main Title
-    ctx.fillStyle = '#ffffff';
-    ctx.font = format === 'square' ? '800 38px "Space Grotesk", sans-serif' : '800 44px "Space Grotesk", sans-serif';
-    ctx.fillText('MEKHALA KALOTSAVAM', W / 2, curY);
-
-    curY += format === 'story' ? 45 : (format === 'square' ? 34 : 38);
+    curY += bannerHeight + secondaryHeight + (format === 'story' ? 40 : (format === 'square' ? 26 : 32));
 
     // Sub-banner: OFFICIAL RESULT ANNOUNCEMENT
     const bannerW = format === 'square' ? 540 : 580;
@@ -173,23 +174,11 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
     ctx.font = '800 15px "Plus Jakarta Sans", system-ui, sans-serif';
     ctx.fillText('★ OFFICIAL RESULT ANNOUNCEMENT ★', W / 2, curY + 22);
 
-    curY += format === 'story' ? 65 : (format === 'square' ? 48 : 55);
+    curY += 72;
 
-    // 4. Event Name Box
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = format === 'square' ? 'bold 30px "Space Grotesk", sans-serif' : 'bold 34px "Space Grotesk", sans-serif';
-    const eventTitle = (event.name || 'Event Results').toUpperCase();
-    ctx.fillText(eventTitle, W / 2, curY);
-
-    curY += format === 'story' ? 36 : (format === 'square' ? 28 : 32);
-
-    // Event Meta (Section & Eligibility)
-    const catStr = formatEventCategories(event);
-    const genStr = formatEventGender(event);
-    const metaStr = `SECTION: ${catStr.toUpperCase()}   •   ELIGIBILITY: ${genStr.toUpperCase()}`;
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '600 14px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText(metaStr, W / 2, curY);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = format === 'square' ? '800 30px "Space Grotesk", sans-serif' : '800 34px "Space Grotesk", sans-serif';
+    ctx.fillText((event.name || 'Event Results').toUpperCase(), W / 2, curY, W - 120);
 
     curY += format === 'story' ? 26 : (format === 'square' ? 18 : 22);
 
@@ -372,23 +361,6 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
 
     curY += format === 'story' ? 36 : (format === 'square' ? 22 : 28);
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '500 14px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText('Cherupushpam Mission League • Official Publication • CML Kalotsavam', W / 2, curY);
-
-    curY += format === 'story' ? 34 : (format === 'square' ? 20 : 26);
-
-    const currentDate = new Date().toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '600 13px "Plus Jakarta Sans", system-ui, sans-serif';
-    ctx.fillText(`Verified on: ${currentDate}, ${currentTime} • CMLResult Official Portal`, W / 2, curY);
-
     if (format === 'story') {
       curY += 36;
       ctx.strokeStyle = 'rgba(251, 191, 36, 0.3)';
@@ -399,7 +371,7 @@ export default function ResultPosterModal({ isOpen, onClose, event, candidates =
       ctx.fillText('OFFICIAL CERTIFIED RESULT RECORD', W / 2, curY + 18);
     }
 
-  }, [event, format, firstWinners, secondWinners, thirdWinners]);
+  }, [event, format, firstWinners, secondWinners, thirdWinners, brandBanner, secondaryBanner]);
 
   // Redraw when modal opens, format changes, or event changes
   useEffect(() => {

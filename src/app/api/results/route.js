@@ -5,6 +5,19 @@ import Candidate from '@/models/Candidate';
 import Mekhala from '@/models/Mekhala';
 import Parish from '@/models/Parish';
 
+function assignPointsRanks(items) {
+  let currentRank = 0;
+  let previousPoints;
+
+  return items.map((item, index) => {
+    if (index === 0 || item.totalPoints !== previousPoints) {
+      currentRank = index + 1;
+    }
+    previousPoints = item.totalPoints;
+    return { ...item, rank: currentRank };
+  });
+}
+
 function aggregateResults(events, candidates, mekhalas, parishes) {
   // Mekhala points map
   const mekhalaMap = {};
@@ -126,21 +139,28 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
   );
 
   // Sort leaderboards
-  const topMekhalas = Object.values(mekhalaMap).sort((a, b) => {
+  const sortedMekhalas = Object.values(mekhalaMap).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
     if (b.firsts !== a.firsts) return b.firsts - a.firsts;
     return b.seconds - a.seconds;
-  }).map((item, idx) => ({
+  });
+  const topMekhalas = assignPointsRanks(sortedMekhalas).map(item => ({
     ...item,
-    rank: idx + 1,
     parishCount: parishCountsByMekhala[item.name] || 0,
   }));
 
-  const topParishes = Object.values(parishMap).sort((a, b) => {
+  const sortedParishes = Object.values(parishMap).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
     if (b.firsts !== a.firsts) return b.firsts - a.firsts;
     return b.seconds - a.seconds;
-  }).map((item, idx) => ({ ...item, rank: idx + 1 }));
+  });
+  const topParishes = assignPointsRanks(sortedParishes);
+  const leadingMekhalas = hasPublishedResults && topMekhalas.length > 0
+    ? topMekhalas.filter(item => item.totalPoints === topMekhalas[0].totalPoints)
+    : [];
+  const leadingParishes = hasPublishedResults && topParishes.length > 0
+    ? topParishes.filter(item => item.totalPoints === topParishes[0].totalPoints)
+    : [];
 
   // Events array
   const eventsList = Object.values(eventMap);
@@ -154,8 +174,10 @@ function aggregateResults(events, candidates, mekhalas, parishes) {
       totalEvents: events.length,
       completedEvents: events.filter(e => e.status === 'Completed').length,
       hasPublishedResults,
-      leadingMekhala: hasPublishedResults ? topMekhalas[0] || null : null,
-      leadingParish: hasPublishedResults ? topParishes[0] || null : null,
+      leadingMekhala: leadingMekhalas[0] || null,
+      leadingParish: leadingParishes[0] || null,
+      leadingMekhalas,
+      leadingParishes,
     },
   };
 }

@@ -230,6 +230,60 @@ button, input, select, textarea {
   margin-bottom: 1.25rem;
 }
 
+.hero-brand-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: min(100%, 1000px);
+  height: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.brand-banner-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.brand-banner-primary,
+.brand-banner-secondary {
+  display: block;
+  height: auto;
+  object-fit: contain;
+}
+
+.brand-banner-primary {
+  width: 100%;
+}
+
+.brand-banner-secondary {
+  width: 72%;
+}
+
+.brand-logo {
+  display: block;
+  height: auto;
+  object-fit: contain;
+}
+
+.nav-brand-logo {
+  width: 46px;
+  flex: 0 0 46px;
+}
+
+.print-brand-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: min(100%, 720px);
+  margin: 0 auto 0.75rem;
+}
+
 .hero-title {
   font-family: var(--font-heading);
   font-size: 2.85rem;
@@ -473,6 +527,11 @@ button, input, select, textarea {
   font-size: 1.25rem;
   color: #fff;
   margin-bottom: 0.25rem;
+}
+
+.podium-tied-names {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .podium-points {
@@ -1247,6 +1306,8 @@ button, input, select, textarea {
 
 /* Paper Sheet Layout */
 .paper-sheet {
+  position: relative;
+  isolation: isolate;
   background: #ffffff;
   color: #111827;
   width: 100%;
@@ -1257,6 +1318,26 @@ button, input, select, textarea {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   line-height: 1.45;
   font-size: 13px;
+}
+
+.print-watermark {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: min(48%, 340px);
+  height: auto;
+  opacity: 0.07;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-sheet-content {
+  position: relative;
+  z-index: 1;
 }
 
 .paper-sheet-header {
@@ -1732,15 +1813,39 @@ button, input, select, textarea {
 .certificate-preview-title,
 .certificate-preview-subtitle,
 .certificate-preview-field,
+.certificate-preview-branding,
 .certificate-print-title,
 .certificate-print-subtitle,
-.certificate-print-field {
+.certificate-print-field,
+.certificate-print-branding {
   position: absolute;
   z-index: 1;
   transform: translate(-50%, -50%);
   text-align: center;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.certificate-preview-branding,
+.certificate-print-branding {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2%;
+  top: 1%;
+  left: 50%;
+  width: 40%;
+  height: auto;
+}
+
+.certificate-branding-logo {
+  width: 16%;
+  flex: 0 0 16%;
+}
+
+.certificate-branding-banners {
+  width: 82%;
+  flex: 0 1 82%;
 }
 
 .certificate-preview-title,
@@ -1790,6 +1895,16 @@ button, input, select, textarea {
   margin: 0;
 }
 
+@page a4-portrait {
+  size: A4 portrait;
+  margin: 12mm 15mm;
+}
+
+@page a4-landscape {
+  size: A4 landscape;
+  margin: 10mm 12mm;
+}
+
 /* ==========================================================================
    CSS Native Print Styles (triggers on window.print())
    ========================================================================== */
@@ -1810,6 +1925,24 @@ button, input, select, textarea {
   /* Hide absolutely everything in DOM */
   body * {
     visibility: hidden !important;
+  }
+
+  body:has(#printable-sheet) > *:not(main),
+  body:has(#certificate-print-area) > *:not(main) {
+    display: none !important;
+  }
+
+  body:has(#printable-sheet) > main,
+  body:has(#certificate-print-area) > main,
+  body:has(#printable-sheet) > main *:has(#printable-sheet),
+  body:has(#certificate-print-area) > main *:has(#certificate-print-area) {
+    display: contents !important;
+    visibility: visible !important;
+  }
+
+  body:has(#printable-sheet) > main *:not(:has(#printable-sheet)):not(#printable-sheet):not(#printable-sheet *),
+  body:has(#certificate-print-area) > main *:not(:has(#certificate-print-area)):not(#certificate-print-area):not(#certificate-print-area *) {
+    display: none !important;
   }
 
   /* Show only printable sheet and its subtree */
@@ -1860,7 +1993,8 @@ button, input, select, textarea {
 
   .certificate-print-title,
   .certificate-print-subtitle,
-  .certificate-print-field {
+  .certificate-print-field,
+  .certificate-print-branding {
     visibility: visible !important;
   }
 
@@ -1879,6 +2013,7 @@ button, input, select, textarea {
 
   #printable-sheet {
     position: absolute !important;
+    display: block !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
@@ -1926,7 +2061,16 @@ button, input, select, textarea {
     border: none !important;
     padding: 0 !important;
     max-width: 100% !important;
-    page-break-after: avoid;
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .paper-sheet.a4-portrait {
+    page: a4-portrait;
+  }
+
+  .paper-sheet.a4-landscape {
+    page: a4-landscape;
   }
 
   .paper-table th {

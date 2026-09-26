@@ -8,6 +8,14 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: __dirname,
+  images: {
+    localPatterns: [
+      {
+        pathname: '/cml-title-banner.png',
+        search: '?v=762f042a',
+      },
+    ],
+  },
   webpack: (config) => {
     config.resolve.alias['@'] = path.resolve(__dirname, 'src');
     return config;

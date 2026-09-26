@@ -8,6 +8,12 @@ import { isAdminAuthenticated, requireAdmin } from '@/lib/adminAuth';
 import { isRegistrationOpen } from '@/app/api/registration-status/route';
 import { isEventAvailableForCandidate, isEventAvailableForGender, isGroupEvent } from '@/lib/eventUtils';
 
+function toTitleCase(value) {
+  return String(value || '').trim().toLocaleLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (match, separator, letter) =>
+    `${separator}${letter.toLocaleUpperCase()}`
+  );
+}
+
 // Helper to compute points from event rules
 function calculatePoints(event, position, grade) {
   let points = 0;
@@ -92,6 +98,14 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
+    const normalizedPhone = String(phone || '').trim();
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      return NextResponse.json({
+        success: false,
+        message: 'Phone number must contain exactly 10 digits.',
+      }, { status: 400 });
+    }
+
     const trimmedSex = sex.trim();
     if (!['Male', 'Female'].includes(trimmedSex)) {
       return NextResponse.json({
@@ -147,10 +161,10 @@ export async function POST(request) {
 
     const candidate = await Candidate.create({
         chestNo: finalChestNo,
-        name: name.trim(),
-        houseName: houseName.trim(),
+        name: toTitleCase(name),
+        houseName: toTitleCase(houseName),
         dob: normalizedDob,
-        phone: (phone || '').trim(),
+        phone: normalizedPhone,
         parish: parish.trim(),
         mekhala: mekhala.trim(),
         section: candidateSection,

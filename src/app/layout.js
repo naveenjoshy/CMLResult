@@ -5,6 +5,11 @@ import Footer from '@/components/Footer';
 export const metadata = {
   title: 'CML Result Portal - Live Fest Results & Management',
   description: 'Live event results, candidate registration, and real-time Parish & Mekhala points leaderboards.',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({ children }) {

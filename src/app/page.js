@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getEventCategories } from '@/lib/eventUtils';
+import BrandBanner from '@/components/BrandBanner';
 
 function RefreshCountdown({ deadline }) {
   const [remainingMs, setRemainingMs] = useState(15000);
@@ -22,6 +23,58 @@ function RefreshCountdown({ deadline }) {
   );
 }
 
+function LeaderboardPodium({ entries, entityType }) {
+  const scoredEntries = entries.filter(entry => Number(entry.totalPoints) > 0);
+  const podiumSlots = [2, 1, 3].map(rank => ({
+    rank,
+    entries: scoredEntries.filter(entry => entry.rank === rank),
+  }));
+
+  if (!scoredEntries.length) return null;
+
+  return (
+    <div className="podium-container">
+      {podiumSlots.map(group => {
+        const { rank, entries: tiedEntries } = group;
+        if (!tiedEntries.length) {
+          return <div key={rank} className="podium-step podium-step-empty" aria-hidden="true" />;
+        }
+        const tiedAtRank = group.entries.length > 1;
+        const rankClass = rank === 1 ? 'first' : rank === 2 ? 'second' : 'third';
+        const rankColor = rank === 1 ? 'var(--gold)' : rank === 2 ? 'var(--silver)' : 'var(--bronze)';
+        const placeLabel = rank === 1
+          ? tiedAtRank ? 'CO-CHAMPIONS' : entityType === 'parish' ? 'CHAMPION PARISH' : 'CHAMPION'
+          : rank === 2
+            ? tiedAtRank ? 'CO-RUNNER-UP' : 'RUNNER-UP'
+            : tiedAtRank ? 'TIED THIRD PLACE' : 'THIRD PLACE';
+        const totalMedals = key => tiedEntries.reduce((total, entry) => total + entry[key], 0);
+
+        return (
+          <div className={`podium-step ${rankClass}`} key={rank}>
+            <div className="podium-badge">{rank === 1 ? '👑' : rank === 2 ? '🥈' : '🥉'}</div>
+            <div className="podium-card">
+              <div style={{ fontSize: '0.8rem', color: rankColor, fontWeight: rank === 1 ? 700 : 600 }}>
+                {placeLabel}
+              </div>
+              <div className="podium-name podium-tied-names" style={rank === 1 ? { fontSize: '1.4rem' } : undefined}>
+                {tiedEntries.map(entry => entry.name).join(', ')}
+              </div>
+              <div className="podium-points" style={{ color: rankColor }}>
+                {tiedEntries[0].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span>
+              </div>
+              <div className="podium-meta">
+                <span>🥇 {totalMedals('firsts')}</span>
+                <span>🥈 {totalMedals('seconds')}</span>
+                <span>🥉 {totalMedals('thirds')}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,9 +83,6 @@ export default function DashboardPage() {
   const [selectedEventFilter, setSelectedEventFilter] = useState('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [mekhalaSearch, setMekhalaSearch] = useState('');
-  const [parishSearch, setParishSearch] = useState('');
-  const [parishMekhalaFilter, setParishMekhalaFilter] = useState('ALL');
 
   async function loadResults() {
     try {
@@ -72,6 +122,8 @@ export default function DashboardPage() {
 
   const { events = [], topMekhalas = [], topParishes = [], stats = {} } = data || {};
   const hasPublishedResults = Boolean(stats.hasPublishedResults);
+  const leadingMekhalas = stats.leadingMekhalas || (stats.leadingMekhala ? [stats.leadingMekhala] : []);
+  const leadingParishes = stats.leadingParishes || (stats.leadingParish ? [stats.leadingParish] : []);
 
   // Filter events
   const filteredEvents = events.filter(ev => {
@@ -84,40 +136,16 @@ export default function DashboardPage() {
     return matchesEvent && matchesCategory && matchesSearch;
   });
 
-  // Filter Mekhalas
-  const filteredTopMekhalas = topMekhalas.filter(m => {
-    if (!mekhalaSearch.trim()) return true;
-    const q = mekhalaSearch.toLowerCase();
-    return m.name.toLowerCase().includes(q);
-  });
-
-  // Unique Mekhalas for Parish filter
-  const uniqueMekhalas = Array.from(new Set(topParishes.map(s => s.mekhala).filter(Boolean)));
-
-  // Filter Parishes
-  const filteredTopParishes = topParishes.filter(s => {
-    const matchesMekhala = parishMekhalaFilter === 'ALL' || s.mekhala === parishMekhalaFilter;
-    if (!matchesMekhala) return false;
-    if (!parishSearch.trim()) return true;
-    const q = parishSearch.toLowerCase();
-    return s.name.toLowerCase().includes(q) || (s.mekhala && s.mekhala.toLowerCase().includes(q));
-  });
-
-  // Extract all unique individual categories
-  const categories = Array.from(new Set(events.flatMap(e => getEventCategories(e)))).filter(Boolean);
-
-  // Ongoing events for the live section
-  const ongoingEvents = events.filter(ev => ev.status === 'Ongoing');
-
-  // Candidate Search results across all events
-  const allCandidates = events.flatMap(e => e.candidates || []);
-  const searchedCandidates = searchQuery.trim() !== '' 
-    ? allCandidates.filter(c => 
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (c.chestNo && c.chestNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (c.houseName && c.houseName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        c.parish?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.mekhala?.toLowerCase().includes(searchQuery.toLowerCase())
+  const categories = Array.from(new Set(events.flatMap(event => getEventCategories(event)))).filter(Boolean);
+  const ongoingEvents = events.filter(event => event.status === 'Ongoing');
+  const allCandidates = events.flatMap(event => event.candidates || []);
+  const searchedCandidates = searchQuery.trim()
+    ? allCandidates.filter(candidate =>
+        candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (candidate.chestNo && candidate.chestNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (candidate.houseName && candidate.houseName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        candidate.parish?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        candidate.mekhala?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : [];
 
@@ -125,10 +153,8 @@ export default function DashboardPage() {
     <div className="container" style={{ paddingTop: '2.5rem', paddingBottom: '4rem' }}>
       {/* Hero Header */}
       <div className="hero-section">
-        <div className="hero-pill">
-          <span>🏆</span> Live Festival Results
-        </div>
-        <h1 className="hero-title">Festival Results & Leaderboard</h1>
+        <BrandBanner className="hero-brand-title" />
+        <h1 className="hero-title">Results</h1>
         <RefreshCountdown deadline={refreshDeadline} />
       </div>
 
@@ -153,21 +179,21 @@ export default function DashboardPage() {
 
         <div className="glass-panel stat-card gold">
           <span className="stat-label">Leading Mekhala</span>
-          <span className="stat-value" style={{ color: '#fbbf24' }}>
-            {stats.leadingMekhala ? stats.leadingMekhala.name : '—'}
+          <span className="stat-value" style={{ color: '#fbbf24', fontSize: leadingMekhalas.length > 1 ? '1.15rem' : undefined, lineHeight: 1.3 }}>
+            {leadingMekhalas.length > 0 ? leadingMekhalas.map(item => item.name).join(', ') : '—'}
           </span>
           <span className="stat-sub">
-            {stats.leadingMekhala ? `${stats.leadingMekhala.totalPoints} Total Points` : 'Awaiting results'}
+            {leadingMekhalas.length > 0 ? `${leadingMekhalas[0].totalPoints} Total Points` : 'Awaiting results'}
           </span>
         </div>
 
         <div className="glass-panel stat-card emerald">
           <span className="stat-label">Leading Parish</span>
-          <span className="stat-value" style={{ color: '#34d399' }}>
-            {stats.leadingParish ? stats.leadingParish.name : '—'}
+          <span className="stat-value" style={{ color: '#34d399', fontSize: leadingParishes.length > 1 ? '1.15rem' : undefined, lineHeight: 1.3 }}>
+            {leadingParishes.length > 0 ? leadingParishes.map(item => item.name).join(', ') : '—'}
           </span>
           <span className="stat-sub">
-            {stats.leadingParish ? `${stats.leadingParish.totalPoints} Total Points` : 'Awaiting results'}
+            {leadingParishes.length > 0 ? `${leadingParishes[0].totalPoints} Total Points` : 'Awaiting results'}
           </span>
         </div>
       </div>
@@ -414,11 +440,9 @@ export default function DashboardPage() {
                               <div className="winner-info">
                                 <span className="place-tag">🥇</span>
                                 <div>
-                                  <div className="winner-name">
-                                    {cand.name} <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>({cand.chestNo})</span>
-                                  </div>
+                                  <div className="winner-name">{cand.name}</div>
                                   <div className="winner-sub">
-                                    {cand.parish} • {cand.mekhala}
+                                    {cand.mekhala}
                                   </div>
                                 </div>
                               </div>
@@ -439,11 +463,9 @@ export default function DashboardPage() {
                               <div className="winner-info">
                                 <span className="place-tag">🥈</span>
                                 <div>
-                                  <div className="winner-name">
-                                    {cand.name} <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>({cand.chestNo})</span>
-                                  </div>
+                                  <div className="winner-name">{cand.name}</div>
                                   <div className="winner-sub">
-                                    {cand.parish} • {cand.mekhala}
+                                    {cand.mekhala}
                                   </div>
                                 </div>
                               </div>
@@ -464,11 +486,9 @@ export default function DashboardPage() {
                               <div className="winner-info">
                                 <span className="place-tag">🥉</span>
                                 <div>
-                                  <div className="winner-name">
-                                    {cand.name} <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>({cand.chestNo})</span>
-                                  </div>
+                                  <div className="winner-name">{cand.name}</div>
                                   <div className="winner-sub">
-                                    {cand.parish} • {cand.mekhala}
+                                    {cand.mekhala}
                                   </div>
                                 </div>
                               </div>
@@ -507,332 +527,68 @@ export default function DashboardPage() {
       {/* TAB 2: TOP MEKHALA LEADERBOARD */}
       {activeTab === 'mekhala' && (
         <div>
-          {/* Podium Top 3 */}
-          {hasPublishedResults && topMekhalas.length >= 2 && (
-            <div className="podium-container">
-              {/* 2nd Place */}
-              {topMekhalas[1] && (
-                <div className="podium-step second">
-                  <div className="podium-badge">🥈</div>
-                  <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--silver)', fontWeight: 600 }}>RUNNER-UP</div>
-                    <div className="podium-name">{topMekhalas[1].name}</div>
-                    <div className="podium-points">{topMekhalas[1].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
-                    <div className="podium-meta">
-                      <span>🥇 {topMekhalas[1].firsts}</span>
-                      <span>🥈 {topMekhalas[1].seconds}</span>
-                      <span>🥉 {topMekhalas[1].thirds}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 1st Place */}
-              {topMekhalas[0] && (
-                <div className="podium-step first">
-                  <div className="podium-badge">👑</div>
-                  <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gold)', fontWeight: 700 }}>CHAMPION</div>
-                    <div className="podium-name" style={{ fontSize: '1.4rem' }}>{topMekhalas[0].name}</div>
-                    <div className="podium-points" style={{ color: '#fbbf24' }}>{topMekhalas[0].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
-                    <div className="podium-meta">
-                      <span>🥇 {topMekhalas[0].firsts}</span>
-                      <span>🥈 {topMekhalas[0].seconds}</span>
-                      <span>🥉 {topMekhalas[0].thirds}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 3rd Place */}
-              {topMekhalas[2] && (
-                <div className="podium-step third">
-                  <div className="podium-badge">🥉</div>
-                  <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--bronze)', fontWeight: 600 }}>THIRD PLACE</div>
-                    <div className="podium-name">{topMekhalas[2].name}</div>
-                    <div className="podium-points">{topMekhalas[2].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
-                    <div className="podium-meta">
-                      <span>🥇 {topMekhalas[2].firsts}</span>
-                      <span>🥈 {topMekhalas[2].seconds}</span>
-                      <span>🥉 {topMekhalas[2].thirds}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Mekhala Search Bar */}
-          <div className="filter-bar" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <div className="search-box" style={{ flex: 1 }}>
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Search mekhala by name..."
-                className="form-input"
-                value={mekhalaSearch}
-                onChange={(e) => setMekhalaSearch(e.target.value)}
-              />
-            </div>
-            {mekhalaSearch && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setMekhalaSearch('')}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Full Table */}
-          <div className="table-wrapper">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '80px' }}>Rank</th>
-                  <th>Mekhala Name</th>
-                  <th>Parishes</th>
-                  <th>Candidates</th>
-                  <th>🥇 1st</th>
-                  <th>🥈 2nd</th>
-                  <th>🥉 3rd</th>
-                  <th>⭐ Grade A/B/C</th>
-                  <th style={{ textAlign: 'right' }}>Total Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!hasPublishedResults ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                      Mekhala standings will appear after results are published.
-                    </td>
-                  </tr>
-                ) : filteredTopMekhalas.length === 0 ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                      No mekhalas match your search "{mekhalaSearch}".
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTopMekhalas.map(m => (
-                    <tr key={m.name}>
-                      <td>
-                        <span className={`rank-pill ${
-                          m.rank === 1 ? 'rank-1' : m.rank === 2 ? 'rank-2' : m.rank === 3 ? 'rank-3' : ''
-                        }`}>
-                          {m.rank}
-                        </span>
-                      </td>
-                      <td>
-                        <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{m.name}</strong>
-                      </td>
-                      <td>{m.parishCount}</td>
-                      <td>{m.candidateCount}</td>
-                      <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{m.firsts}</span></td>
-                      <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{m.seconds}</span></td>
-                      <td><span style={{ color: '#d97706', fontWeight: 600 }}>{m.thirds}</span></td>
-                      <td>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                          {m.gradeA} / {m.gradeB} / {m.gradeC}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <span style={{
-                          fontSize: '1.25rem',
-                          fontWeight: 800,
-                          fontFamily: 'var(--font-heading)',
-                          color: m.rank === 1 ? '#fbbf24' : 'var(--accent-cyan)'
-                        }}>
-                          {m.totalPoints}
-                        </span>
-                      </td>
+          {hasPublishedResults ? (
+            <>
+              <LeaderboardPodium entries={topMekhalas} entityType="mekhala" />
+              <div className="table-wrapper" style={{ marginTop: '1.5rem' }}>
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '90px' }}>Rank</th>
+                      <th>Mekhala</th>
+                      <th style={{ textAlign: 'right' }}>Points</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {topMekhalas.map(mekhala => (
+                      <tr key={mekhala.name}>
+                        <td><span className={`rank-pill ${mekhala.rank <= 3 ? `rank-${mekhala.rank}` : ''}`}>{mekhala.rank}</span></td>
+                        <td><strong style={{ color: '#fff' }}>{mekhala.name}</strong></td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: mekhala.rank === 1 ? '#fbbf24' : 'var(--text-primary)' }}>{mekhala.totalPoints}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="glass-panel empty-state">Mekhala standings will appear after results are published.</div>
+          )}
         </div>
       )}
 
       {/* TAB 3: TOP PARISH LEADERBOARD */}
       {activeTab === 'parish' && (
         <div>
-          {/* Podium Top 3 */}
-          {hasPublishedResults && topParishes.length >= 2 && (
-            <div className="podium-container">
-              {/* 2nd Place */}
-              {topParishes[1] && (
-                <div className="podium-step second">
-                  <div className="podium-badge">🥈</div>
-                  <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--silver)', fontWeight: 600 }}>RUNNER-UP</div>
-                    <div className="podium-name">{topParishes[1].name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topParishes[1].mekhala}</div>
-                    <div className="podium-points">{topParishes[1].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
-                    <div className="podium-meta">
-                      <span>🥇 {topParishes[1].firsts}</span>
-                      <span>🥈 {topParishes[1].seconds}</span>
-                      <span>🥉 {topParishes[1].thirds}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 1st Place */}
-              {topParishes[0] && (
-                <div className="podium-step first">
-                  <div className="podium-badge">👑</div>
-                  <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gold)', fontWeight: 700 }}>CHAMPION PARISH</div>
-                    <div className="podium-name" style={{ fontSize: '1.4rem' }}>{topParishes[0].name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topParishes[0].mekhala}</div>
-                    <div className="podium-points" style={{ color: '#fbbf24' }}>{topParishes[0].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
-                    <div className="podium-meta">
-                      <span>🥇 {topParishes[0].firsts}</span>
-                      <span>🥈 {topParishes[0].seconds}</span>
-                      <span>🥉 {topParishes[0].thirds}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 3rd Place */}
-              {topParishes[2] && (
-                <div className="podium-step third">
-                  <div className="podium-badge">🥉</div>
-                  <div className="podium-card">
-                    <div style={{ fontSize: '0.8rem', color: 'var(--bronze)', fontWeight: 600 }}>THIRD PLACE</div>
-                    <div className="podium-name">{topParishes[2].name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{topParishes[2].mekhala}</div>
-                    <div className="podium-points">{topParishes[2].totalPoints} <span style={{ fontSize: '1rem' }}>PTS</span></div>
-                    <div className="podium-meta">
-                      <span>🥇 {topParishes[2].firsts}</span>
-                      <span>🥈 {topParishes[2].seconds}</span>
-                      <span>🥉 {topParishes[2].thirds}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Parish Search & Filter Bar */}
-          <div className="filter-bar" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <div className="search-box" style={{ flex: 1, minWidth: '220px' }}>
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Search parish by name or parent mekhala..."
-                className="form-input"
-                value={parishSearch}
-                onChange={(e) => setParishSearch(e.target.value)}
-              />
-            </div>
-            <select
-              className="form-select"
-              style={{ width: 'auto', minWidth: '180px' }}
-              value={parishMekhalaFilter}
-              onChange={(e) => setParishMekhalaFilter(e.target.value)}
-            >
-              <option value="ALL">All Mekhalas</option>
-              {uniqueMekhalas.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            {(parishSearch || parishMekhalaFilter !== 'ALL') && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setParishSearch('');
-                  setParishMekhalaFilter('ALL');
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Full Parish Table */}
-          <div className="table-wrapper">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '80px' }}>Rank</th>
-                  <th>Parish Name</th>
-                  <th>Parent Mekhala</th>
-                  <th>Candidates</th>
-                  <th>🥇 1st</th>
-                  <th>🥈 2nd</th>
-                  <th>🥉 3rd</th>
-                  <th>⭐ Grade A/B/C</th>
-                  <th style={{ textAlign: 'right' }}>Total Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!hasPublishedResults ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                      Parish standings will appear after results are published.
-                    </td>
-                  </tr>
-                ) : filteredTopParishes.length === 0 ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                      No parishes match your search filters.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTopParishes.map(s => (
-                    <tr key={s.name}>
-                      <td>
-                        <span className={`rank-pill ${
-                          s.rank === 1 ? 'rank-1' : s.rank === 2 ? 'rank-2' : s.rank === 3 ? 'rank-3' : ''
-                        }`}>
-                          {s.rank}
-                        </span>
-                      </td>
-                      <td>
-                        <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{s.name}</strong>
-                      </td>
-                      <td>
-                        <span style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          fontSize: '0.85rem'
-                        }}>
-                          {s.mekhala}
-                        </span>
-                      </td>
-                      <td>{s.candidateCount}</td>
-                      <td><span style={{ color: '#fbbf24', fontWeight: 600 }}>{s.firsts}</span></td>
-                      <td><span style={{ color: '#cbd5e1', fontWeight: 600 }}>{s.seconds}</span></td>
-                      <td><span style={{ color: '#d97706', fontWeight: 600 }}>{s.thirds}</span></td>
-                      <td>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                          {s.gradeA} / {s.gradeB} / {s.gradeC}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <span style={{
-                          fontSize: '1.25rem',
-                          fontWeight: 800,
-                          fontFamily: 'var(--font-heading)',
-                          color: s.rank === 1 ? '#fbbf24' : 'var(--accent-cyan)'
-                        }}>
-                          {s.totalPoints}
-                        </span>
-                      </td>
+          {hasPublishedResults ? (
+            <>
+              <LeaderboardPodium entries={topParishes} entityType="parish" />
+              <div className="table-wrapper" style={{ marginTop: '1.5rem' }}>
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '90px' }}>Rank</th>
+                      <th>Parish</th>
+                      <th>Mekhala</th>
+                      <th style={{ textAlign: 'right' }}>Points</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {topParishes.map(parish => (
+                      <tr key={parish.name}>
+                        <td><span className={`rank-pill ${parish.rank <= 3 ? `rank-${parish.rank}` : ''}`}>{parish.rank}</span></td>
+                        <td><strong style={{ color: '#fff' }}>{parish.name}</strong></td>
+                        <td>{parish.mekhala}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: parish.rank === 1 ? '#fbbf24' : 'var(--text-primary)' }}>{parish.totalPoints}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="glass-panel empty-state">Parish standings will appear after results are published.</div>
+          )}
         </div>
       )}
 

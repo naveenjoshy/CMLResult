@@ -16,8 +16,12 @@ import {
   DEFAULT_CATEGORY_RULES,
 } from '@/lib/eventUtils';
 import PrintSheetModal from '@/components/PrintSheetModal';
+import CandidateRosterPrintModal from '@/components/CandidateRosterPrintModal';
 import ResultPosterModal from '@/components/ResultPosterModal';
 import CertificateDesigner from '@/components/CertificateDesigner';
+import BrandBanner from '@/components/BrandBanner';
+import DateInput from '@/components/DateInput';
+import { formatDateDDMMYYYY } from '@/lib/dateUtils';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -41,6 +45,16 @@ export default function AdminPage() {
       event: eventObj,
       candidates: eventCandidates || [],
     });
+  };
+
+  const [rosterPrintState, setRosterPrintState] = useState({
+    isOpen: false,
+    title: '',
+    candidates: [],
+  });
+
+  const openRosterPrint = (title, rosterCandidates) => {
+    setRosterPrintState({ isOpen: true, title, candidates: rosterCandidates });
   };
 
   // Result Poster modal state
@@ -87,6 +101,8 @@ export default function AdminPage() {
 
   // Result entry state
   const [selectedEventName, setSelectedEventName] = useState('');
+  const [pendingResultChanges, setPendingResultChanges] = useState({});
+  const [isPublishingResults, setIsPublishingResults] = useState(false);
 
   // Event form state
   const [newEvent, setNewEvent] = useState({
@@ -200,6 +216,16 @@ export default function AdminPage() {
     }
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const handleRefreshRequest = async () => {
+      await fetchAllData();
+      window.dispatchEvent(new Event('cml-admin-refresh-completed'));
+    };
+    window.addEventListener('cml-admin-refresh-requested', handleRefreshRequest);
+    return () => window.removeEventListener('cml-admin-refresh-requested', handleRefreshRequest);
+  }, [isAuthenticated]);
+
   // Handle Admin PIN verification
   const handlePinSubmit = async (e) => {
     e.preventDefault();
@@ -222,44 +248,85 @@ export default function AdminPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/admin/logout', { method: 'POST' });
-    } catch (err) {
-      console.error('Failed to clear admin session:', err);
-    }
-    setIsAuthenticated(false);
-    window.dispatchEvent(new Event('cml-admin-session-changed'));
-  };
-
   // Notification helper
   const notify = (type, text) => {
     setActionMessage({ type, text });
     setTimeout(() => setActionMessage(null), 4000);
   };
 
-  // 1. RESULT ENTRY: update candidate position & grade
-  const handleResultChange = async (candidateId, field, value) => {
-    try {
-      const res = await fetch('/api/candidates', {
+  // Stage result changes locally until the selected event is published.
+  const handleResultChange = (candidateId, field, value) => {
+    const candidate = candidates.find(item => item._id === candidateId);
+    if (!candidate) return;
+    const savedValue = candidate[field] || 'None';
+
+    setPendingResultChanges(previous => {
+      const candidateChanges = { ...(previous[candidateId] || {}) };
+      if (value === savedValue) {
+        delete candidateChanges[field];
+      } else {
+        candidateChanges[field] = value;
+      }
+
+      const next = { ...previous };
+      if (Object.keys(candidateChanges).length > 0) {
+        next[candidateId] = candidateChanges;
+      } else {
+        delete next[candidateId];
+      }
+      return next;
+    });
+  };
+
+  const publishSelectedEventResults = async () => {
+    if (!selectedEvent || isPublishingResults) return;
+    const pendingCandidates = candidatesForSelectedEvent
+      .filter(candidate => pendingResultChanges[candidate._id])
+      .map(candidate => ({
+        id: candidate._id,
+        fields: { ...pendingResultChanges[candidate._id] },
+      }));
+    if (pendingCandidates.length === 0) return;
+
+    setIsPublishingResults(true);
+    const outcomes = await Promise.allSettled(pendingCandidates.map(async change => {
+      const response = await fetch('/api/candidates', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: candidateId, [field]: value }),
+        body: JSON.stringify({ id: change.id, ...change.fields }),
       });
-      const json = await res.json();
-      if (json.success) {
-        setCandidates(prev => prev.map(c => c._id === candidateId ? json.data : c));
-        if (field === 'position' && value && value !== 'None') {
-          notify('success', `Position set to ${value}! Winner poster is ready to download.`);
-        } else {
-          notify('success', 'Candidate result & points updated!');
-        }
-      } else {
-        notify('error', json.message || 'Failed to update result');
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to publish candidate result');
       }
-    } catch (err) {
-      notify('error', 'Network error updating result');
+      return { id: change.id, candidate: result.data };
+    }));
+
+    const published = outcomes
+      .filter(outcome => outcome.status === 'fulfilled')
+      .map(outcome => outcome.value);
+    const failedCount = outcomes.length - published.length;
+
+    if (published.length > 0) {
+      const publishedIds = new Set(published.map(item => item.id));
+      setCandidates(previous => previous.map(candidate =>
+        publishedIds.has(candidate._id)
+          ? published.find(item => item.id === candidate._id).candidate
+          : candidate
+      ));
+      setPendingResultChanges(previous => {
+        const next = { ...previous };
+        publishedIds.forEach(id => delete next[id]);
+        return next;
+      });
     }
+
+    if (failedCount === 0) {
+      notify('success', `Results published for ${selectedEvent.name}.`);
+    } else {
+      notify('error', `${published.length} of ${outcomes.length} candidate results published. Please retry the remaining changes.`);
+    }
+    setIsPublishingResults(false);
   };
 
   // Change Event Status
@@ -273,7 +340,6 @@ export default function AdminPage() {
       const json = await res.json();
       if (json.success) {
         setEvents(prev => prev.map(e => e._id === eventId ? json.data : e));
-        notify('success', `Event status set to ${newStatus}`);
       }
     } catch (err) {
       notify('error', 'Failed to update event status');
@@ -762,6 +828,7 @@ export default function AdminPage() {
       <div className="container" style={{ padding: '6rem 1.5rem', maxWidth: '480px' }}>
         <div className="glass-panel" style={{ padding: '2.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🔐</div>
+          <BrandBanner className="hero-brand-title" />
           <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.75rem', marginBottom: '0.5rem', color: '#fff' }}>
             Admin Portal
           </h2>
@@ -804,9 +871,6 @@ export default function AdminPage() {
             </button>
           </form>
 
-          <div style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Configurable in <code>.env.local</code> as <code>ADMIN_PASSWORD</code>
-          </div>
         </div>
       </div>
     );
@@ -816,10 +880,16 @@ export default function AdminPage() {
   const sortedEvents = [...events].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   );
-  const selectedEvent = sortedEvents.find(e => e.name === selectedEventName) || sortedEvents[0];
+  const eventsWithRegisteredCandidates = sortedEvents.filter(event =>
+    candidates.some(candidate => candidate.event === event.name)
+  );
+  const selectedEvent = eventsWithRegisteredCandidates.find(e => e.name === selectedEventName) || eventsWithRegisteredCandidates[0];
   const candidatesForSelectedEvent = selectedEvent
     ? candidates.filter(c => c.event === selectedEvent.name)
     : [];
+  const pendingCandidatesForSelectedEvent = candidatesForSelectedEvent.filter(
+    candidate => pendingResultChanges[candidate._id]
+  );
   const managedEventCategories = Array.from(new Set([
     ...sectionOptions,
     ...events.flatMap(event => getEventCategories(event)),
@@ -877,9 +947,7 @@ export default function AdminPage() {
       {/* Admin Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <div className="hero-pill" style={{ marginBottom: '0.5rem' }}>
-            <span>⚙️</span> Administration & Scoring Center
-          </div>
+          <BrandBanner className="hero-brand-title" />
           <h1 className="hero-title" style={{ fontSize: '2.2rem', marginBottom: '0.25rem' }}>
             Admin Dashboard
           </h1>
@@ -888,14 +956,6 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="button" onClick={fetchAllData} className="btn btn-secondary btn-sm" disabled={loading}>
-            {loading ? 'Refreshing...' : '🔄 Refresh Data'}
-          </button>
-          <button type="button" onClick={handleLogout} className="btn btn-danger btn-sm">
-            🚪 Logout
-          </button>
-        </div>
       </div>
 
       {/* Action Notification Alert */}
@@ -988,7 +1048,7 @@ export default function AdminPage() {
               <div>
                 <h3 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '0.25rem' }}>Select Event to Enter Results</h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                  Assigning positions and grades immediately calculates candidate, Parish, and Mekhala points.
+                  Changes stay pending until published; candidate, Parish, and Mekhala points update when results are published.
                 </p>
               </div>
 
@@ -996,10 +1056,13 @@ export default function AdminPage() {
                 <select
                   className="form-select"
                   style={{ minWidth: '220px' }}
-                  value={selectedEventName}
+                  value={selectedEvent?.name || ''}
                   onChange={(e) => setSelectedEventName(e.target.value)}
+                  disabled={isPublishingResults || eventsWithRegisteredCandidates.length === 0}
                 >
-                  {sortedEvents.map(ev => (
+                  {eventsWithRegisteredCandidates.length === 0 ? (
+                    <option value="">No events with registered candidates</option>
+                  ) : eventsWithRegisteredCandidates.map(ev => (
                     <option key={ev._id || ev.name} value={ev.name}>
                       {ev.name} ({ev.status || 'Upcoming'})
                     </option>
@@ -1012,6 +1075,7 @@ export default function AdminPage() {
                     style={{ width: 'auto' }}
                     value={selectedEvent.status || 'Upcoming'}
                     onChange={(e) => handleEventStatusChange(selectedEvent._id, e.target.value)}
+                    disabled={isPublishingResults}
                   >
                     <option value="Upcoming">Status: Upcoming</option>
                     <option value="In Progress">Status: In Progress</option>
@@ -1021,6 +1085,17 @@ export default function AdminPage() {
 
                 {selectedEvent && (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {pendingCandidatesForSelectedEvent.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={publishSelectedEventResults}
+                        disabled={isPublishingResults}
+                        style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem', fontWeight: 700 }}
+                      >
+                        {isPublishingResults ? 'Publishing...' : `Publish Results (${pendingCandidatesForSelectedEvent.length})`}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -1174,7 +1249,8 @@ export default function AdminPage() {
                         <select
                           className="form-select"
                           style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                          value={cand.position || 'None'}
+                          value={pendingResultChanges[cand._id]?.position ?? cand.position ?? 'None'}
+                          disabled={isPublishingResults}
                           onChange={(e) => handleResultChange(cand._id, 'position', e.target.value)}
                         >
                           <option value="None">None</option>
@@ -1187,7 +1263,8 @@ export default function AdminPage() {
                         <select
                           className="form-select"
                           style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                          value={cand.grade || 'None'}
+                          value={pendingResultChanges[cand._id]?.grade ?? cand.grade ?? 'None'}
+                          disabled={isPublishingResults}
                           onChange={(e) => handleResultChange(cand._id, 'grade', e.target.value)}
                         >
                           <option value="None">None</option>
@@ -1831,7 +1908,7 @@ export default function AdminPage() {
                       </td>
                       <td><strong style={{ color: '#fff' }}>{c.name}</strong></td>
                       <td>{c.houseName}</td>
-                      <td>{c.dob}</td>
+                      <td>{formatDateDDMMYYYY(c.dob) || '—'}</td>
                       <td>
                         <span style={{ fontSize: '0.85rem', color: 'var(--accent-cyan)' }}>
                           {c.phone || '—'}
@@ -1966,6 +2043,14 @@ export default function AdminPage() {
                               </div>
                             ) : (
                               <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => openRosterPrint(`Mekhala: ${m.name}`, candidates.filter(candidate => candidate.mekhala === m.name))}
+                                  title={`Print candidate list for ${m.name}`}
+                                >
+                                  Print List
+                                </button>
                                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingMekhala({ ...m })}>
                                   ✏️ Edit
                                 </button>
@@ -2139,6 +2224,14 @@ export default function AdminPage() {
                               </div>
                             ) : (
                               <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => openRosterPrint(`Parish: ${s.name}`, candidates.filter(candidate => candidate.parish === s.name))}
+                                  title={`Print candidate list for ${s.name}`}
+                                >
+                                  Print List
+                                </button>
                                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingParish({ ...s })}>
                                   ✏️ Edit
                                 </button>
@@ -2218,21 +2311,19 @@ export default function AdminPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Min DOB (Earliest)</label>
-                    <input
-                      type="date"
+                    <DateInput
                       className="form-input"
                       value={newCategory.minDob}
-                      onChange={(e) => setNewCategory({ ...newCategory, minDob: e.target.value })}
+                      onDateChange={value => setNewCategory({ ...newCategory, minDob: value })}
                     />
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Optional exact cutoff</small>
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Max DOB (Latest)</label>
-                    <input
-                      type="date"
+                    <DateInput
                       className="form-input"
                       value={newCategory.maxDob}
-                      onChange={(e) => setNewCategory({ ...newCategory, maxDob: e.target.value })}
+                      onDateChange={value => setNewCategory({ ...newCategory, maxDob: value })}
                     />
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Optional exact cutoff</small>
                   </div>
@@ -2318,7 +2409,7 @@ export default function AdminPage() {
                           <td>
                             {hasDob ? (
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                {cat.minDob ? cat.minDob : 'Any'} → {cat.maxDob ? cat.maxDob : 'Any'}
+                                {cat.minDob ? formatDateDDMMYYYY(cat.minDob) : 'Any'} → {cat.maxDob ? formatDateDDMMYYYY(cat.maxDob) : 'Any'}
                               </div>
                             ) : (
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No DOB cutoff (Open / General)</span>
@@ -2635,20 +2726,18 @@ export default function AdminPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Min DOB (Earliest)</label>
-                  <input
-                    type="date"
+                  <DateInput
                     className="form-input"
                     value={editingCategory.minDob || ''}
-                    onChange={(e) => setEditingCategory({ ...editingCategory, minDob: e.target.value })}
+                    onDateChange={value => setEditingCategory({ ...editingCategory, minDob: value })}
                   />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Max DOB (Latest)</label>
-                  <input
-                    type="date"
+                  <DateInput
                     className="form-input"
                     value={editingCategory.maxDob || ''}
-                    onChange={(e) => setEditingCategory({ ...editingCategory, maxDob: e.target.value })}
+                    onDateChange={value => setEditingCategory({ ...editingCategory, maxDob: value })}
                   />
                 </div>
               </div>
@@ -2745,13 +2834,11 @@ export default function AdminPage() {
 
                 <div className="form-group">
                   <label className="form-label" style={{ marginBottom: '0.2rem' }}>Date of Birth *</label>
-                  <input
-                    type="date"
+                  <DateInput
                     className="form-input"
                     value={editingCandidate.dob}
-                    max={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => {
-                      const newDob = e.target.value;
+                    maxDate={new Date().toISOString().split('T')[0]}
+                    onDateChange={newDob => {
                       const detectedSec = getCategoryForDob(newDob, categories);
                       const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, detectedSec, editingCandidate.sex));
                       const isStillValid = validForNew.some(ev => ev.name === editingCandidate.event);
@@ -2990,12 +3077,11 @@ export default function AdminPage() {
                       </span>
                     )}
                   </div>
-                  <input
-                    type="date"
+                  <DateInput
                     className="form-input"
                     value={adminCandidateForm.dob}
-                    onChange={(e) => {
-                      const newDob = e.target.value;
+                    maxDate={new Date().toISOString().split('T')[0]}
+                    onDateChange={newDob => {
                       const detectedSec = getCategoryForDob(newDob, categories);
                       const validForNew = events.filter(ev => isEventAvailableForCandidate(ev, detectedSec, adminCandidateForm.sex));
                       const isStillValid = validForNew.some(ev => ev.name === adminCandidateForm.event);
@@ -3181,6 +3267,13 @@ export default function AdminPage() {
         initialType={printModalState.type}
         event={printModalState.event}
         candidates={printModalState.candidates}
+      />
+
+      <CandidateRosterPrintModal
+        isOpen={rosterPrintState.isOpen}
+        onClose={() => setRosterPrintState(prev => ({ ...prev, isOpen: false }))}
+        title={rosterPrintState.title}
+        candidates={rosterPrintState.candidates}
       />
 
       {/* Winner Announcement Poster Modal (1st, 2nd, 3rd) */}

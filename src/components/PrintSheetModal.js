@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatEventCategories, formatEventGender } from '@/lib/eventUtils';
+import BrandBanner from '@/components/BrandBanner';
+import { formatDateDDMMYYYY } from '@/lib/dateUtils';
 
 export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage', event, candidates = [] }) {
   const [sheetType, setSheetType] = useState(initialType); // 'stage' or 'result'
@@ -18,49 +19,33 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
     window.print();
   };
 
-  // Helper to extract number from chest number for natural sorting (e.g. "CML-12" -> 12)
-  const getChestNum = (chestNo) => {
-    if (!chestNo) return 999999;
-    const match = chestNo.match(/\d+/);
-    return match ? parseInt(match[0], 10) : 999999;
-  };
-
-  // Candidates for Stage Manager List: sorted by Chest Number
+  // Candidates with chest numbers come first; unnumbered entries use Mekhala order.
   const stageCandidates = [...candidates].sort((a, b) => {
-    const numA = getChestNum(a.chestNo);
-    const numB = getChestNum(b.chestNo);
-    if (numA !== numB) return numA - numB;
-    return (a.chestNo || '').localeCompare(b.chestNo || '');
+    const chestA = (a.chestNo || '').trim();
+    const chestB = (b.chestNo || '').trim();
+    if (chestA && chestB) {
+      return chestA.localeCompare(chestB, undefined, { numeric: true, sensitivity: 'base' });
+    }
+    if (chestA) return -1;
+    if (chestB) return 1;
+    return (a.mekhala || '').localeCompare(b.mekhala || '', undefined, { sensitivity: 'base' }) ||
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
   });
 
-  // Position priority helper
-  const getPosPriority = (pos) => {
-    if (pos === 'First') return 1;
-    if (pos === 'Second') return 2;
-    if (pos === 'Third') return 3;
-    return 4;
-  };
-
-  // Candidates for Result Sheet: sorted by Position first, then Points, then Name
+  // Candidates for Result Sheet: sorted by points descending, then name.
   const resultCandidates = [...candidates].sort((a, b) => {
-    const posA = getPosPriority(a.position);
-    const posB = getPosPriority(b.position);
-    if (posA !== posB) return posA - posB;
-    if ((b.totalPoints || 0) !== (a.totalPoints || 0)) {
-      return (b.totalPoints || 0) - (a.totalPoints || 0);
+    const pointsDifference = (Number(b.totalPoints) || 0) - (Number(a.totalPoints) || 0);
+    if (pointsDifference) {
+      return pointsDifference;
     }
-    return (a.name || '').localeCompare(b.name || '');
+    return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
   });
 
   const firstPlace = candidates.filter(c => c.position === 'First');
   const secondPlace = candidates.filter(c => c.position === 'Second');
   const thirdPlace = candidates.filter(c => c.position === 'Third');
 
-  const currentDate = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const currentDate = formatDateDDMMYYYY(new Date());
   const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
@@ -115,15 +100,12 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
         {/* Modal Scrollable Body */}
         <div className="print-modal-body">
           {/* Printable Document Container */}
-          <div id="printable-sheet" className="paper-sheet">
-            {/* Top Official Header */}
-            <div style={{ textAlign: 'center', borderBottom: '2px solid #111827', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.12em', color: '#4b5563', textTransform: 'uppercase' }}>
-                Cherupushpa Mission League (CML)
-              </div>
-              <h1 style={{ fontSize: '1.7rem', fontWeight: 800, margin: '0.2rem 0', color: '#111827', letterSpacing: '-0.02em' }}>
-                CML ANNUAL FESTIVAL
-              </h1>
+          <div id="printable-sheet" className="paper-sheet a4-landscape">
+            {sheetType === 'result' && <img src="/logo.png" alt="" aria-hidden="true" className="print-watermark" />}
+            <div className="print-sheet-content">
+              {/* Top Official Header */}
+              <div style={{ textAlign: 'center', borderBottom: '2px solid #111827', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+                <BrandBanner className="print-brand-banner" />
               <div style={{
                 display: 'inline-block',
                 background: sheetType === 'stage' ? '#1f2937' : '#047857',
@@ -136,69 +118,19 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                 textTransform: 'uppercase',
                 marginTop: '0.35rem'
               }}>
-                {sheetType === 'stage' ? 'STAGE MANAGER PARTICIPANT CALL SHEET' : 'OFFICIAL EVENT RESULT SHEET'}
+                {sheetType === 'stage' ? 'STAGE MANAGER PARTICIPANT CALL SHEET' : 'OFFICIAL RESULT'}
               </div>
-            </div>
+              </div>
 
-            {/* Event Metadata Card */}
             <div style={{
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
-              borderRadius: '6px',
-              padding: '0.85rem 1.25rem',
               marginBottom: '1.25rem',
-              fontSize: '0.88rem',
-              color: '#374151'
+              color: '#111827',
+              fontSize: '28px',
+              fontWeight: 800,
+              lineHeight: 1.2,
+              textAlign: 'center',
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem 1rem' }}>
-                <div>
-                  <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>EVENT NAME</span>
-                  <strong style={{ fontSize: '1.05rem', color: '#111827' }}>{event.name}</strong>
-                </div>
-                <div>
-                  <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>SECTION / CATEGORY</span>
-                  <strong style={{ color: '#111827' }}>{formatEventCategories(event)}</strong>
-                </div>
-                <div>
-                  <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>ELIGIBILITY</span>
-                  <strong style={{ color: '#111827' }}>{formatEventGender(event)}</strong>
-                </div>
-                <div>
-                  <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>TOTAL CANDIDATES</span>
-                  <strong style={{ color: '#111827' }}>{candidates.length} registered</strong>
-                </div>
-                {sheetType === 'stage' ? (
-                  <>
-                    <div>
-                      <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>STAGE / VENUE</span>
-                      <span style={{ color: '#9ca3af' }}>__________________</span>
-                    </div>
-                    <div>
-                      <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>TIME / SESSION</span>
-                      <span style={{ color: '#9ca3af' }}>__________________</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>STATUS</span>
-                      <strong style={{ color: event.status === 'Completed' ? '#059669' : '#d97706' }}>
-                        {event.status || 'Completed'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#6b7280', fontSize: '0.8rem', display: 'block' }}>DATE & TIME</span>
-                      <span style={{ color: '#111827' }}>{currentDate} • {currentTime}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {sheetType === 'result' && (
-                <div style={{ marginTop: '0.65rem', paddingTop: '0.65rem', borderTop: '1px dashed #d1d5db', fontSize: '0.78rem', color: '#6b7280' }}>
-                  <strong>Points Formula:</strong> 1st: {event.points?.first ?? 5} pts | 2nd: {event.points?.second ?? 3} pts | 3rd: {event.points?.third ?? 1} pts | Grade A: +{event.points?.gradeA ?? 5} pts | Grade B: +{event.points?.gradeB ?? 3} pts | Grade C: +{event.points?.gradeC ?? 1} pts
-                </div>
-              )}
+              {event.name}
             </div>
 
             {/* SHEET 1: STAGE MANAGER PARTICIPANT CALL SHEET */}
@@ -228,7 +160,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                             {idx + 1}
                           </td>
                           <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '1rem', color: '#111827' }}>
-                            {c.chestNo || '—'}
+                            {c.chestNo || ''}
                           </td>
                           <td>
                             <div style={{ fontWeight: 700, color: '#111827' }}>{c.name}</div>
@@ -250,24 +182,6 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                   </tbody>
                 </table>
 
-                {/* Stage Manager Sheet Signature Footer */}
-                <div style={{
-                  marginTop: '3.5rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '0 1rem',
-                  fontSize: '0.85rem',
-                  color: '#374151'
-                }}>
-                  <div style={{ textAlign: 'center', width: '220px' }}>
-                    <div style={{ borderBottom: '1px solid #111827', marginBottom: '0.4rem', height: '24px' }}></div>
-                    <strong>Stage Manager Signature</strong>
-                  </div>
-                  <div style={{ textAlign: 'center', width: '220px' }}>
-                    <div style={{ borderBottom: '1px solid #111827', marginBottom: '0.4rem', height: '24px' }}></div>
-                    <strong>Call Desk In-Charge</strong>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -294,7 +208,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       {firstPlace.length > 0 ? firstPlace.map(w => (
                         <div key={w._id} style={{ marginTop: '0.25rem' }}>
                           <strong style={{ fontSize: '0.95rem', color: '#111827', display: 'block' }}>{w.name}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#78350f' }}>Chest: {w.chestNo} • {w.parish}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#78350f' }}>{w.mekhala}</span>
                         </div>
                       )) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>None</span>}
                     </div>
@@ -311,7 +225,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       {secondPlace.length > 0 ? secondPlace.map(w => (
                         <div key={w._id} style={{ marginTop: '0.25rem' }}>
                           <strong style={{ fontSize: '0.95rem', color: '#111827', display: 'block' }}>{w.name}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#334155' }}>Chest: {w.chestNo} • {w.parish}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#334155' }}>{w.mekhala}</span>
                         </div>
                       )) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>None</span>}
                     </div>
@@ -328,7 +242,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                       {thirdPlace.length > 0 ? thirdPlace.map(w => (
                         <div key={w._id} style={{ marginTop: '0.25rem' }}>
                           <strong style={{ fontSize: '0.95rem', color: '#111827', display: 'block' }}>{w.name}</strong>
-                          <span style={{ fontSize: '0.8rem', color: '#9a3412' }}>Chest: {w.chestNo} • {w.parish}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#9a3412' }}>{w.mekhala}</span>
                         </div>
                       )) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>None</span>}
                     </div>
@@ -374,7 +288,7 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                             )}
                           </td>
                           <td style={{ textAlign: 'center', fontWeight: 700, color: '#111827' }}>
-                            {c.chestNo || '—'}
+                            {c.chestNo || ''}
                           </td>
                           <td>
                             <div style={{ fontWeight: 700, color: '#111827' }}>{c.name}</div>
@@ -401,33 +315,17 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
                   Certified that the results above have been verified and tallied with the official judges&apos; scoring sheets.
                 </div>
 
-                <div style={{
-                  marginTop: '3.5rem',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '2rem',
-                  padding: '0 1rem',
-                  fontSize: '0.82rem',
-                  color: '#374151'
-                }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ borderBottom: '1px solid #111827', marginBottom: '0.4rem', height: '24px' }}></div>
-                    <strong>Judge 1 Signature</strong>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ borderBottom: '1px solid #111827', marginBottom: '0.4rem', height: '24px' }}></div>
-                    <strong>Judge 2 Signature</strong>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ borderBottom: '1px solid #111827', marginBottom: '0.4rem', height: '24px' }}></div>
-                    <strong>Convenor / Chief Judge</strong>
-                  </div>
-                </div>
               </div>
             )}
 
+              {sheetType === 'result' && (
+                <div style={{ marginTop: '1.25rem', textAlign: 'center', fontSize: '0.72rem', color: '#6b7280' }}>
+                  <strong>Points Formula:</strong> 1st: {event.points?.first ?? 5} pts | 2nd: {event.points?.second ?? 3} pts | 3rd: {event.points?.third ?? 1} pts | Grade A: +{event.points?.gradeA ?? 5} pts | Grade B: +{event.points?.gradeB ?? 3} pts | Grade C: +{event.points?.gradeC ?? 1} pts
+                </div>
+              )}
+
             {/* Document Footer Metadata */}
-            <div style={{
+              <div style={{
               marginTop: '2rem',
               paddingTop: '0.75rem',
               borderTop: '1px solid #e5e7eb',
@@ -435,9 +333,10 @@ export default function PrintSheetModal({ isOpen, onClose, initialType = 'stage'
               justifyContent: 'space-between',
               fontSize: '0.72rem',
               color: '#9ca3af'
-            }}>
-              <span>CML Results Portal • Live Festival Management System</span>
-              <span>Generated: {currentDate} {currentTime}</span>
+              }}>
+                {sheetType === 'stage' && <span>CML Results Portal • Live Festival Management System</span>}
+                <span>Generated: {currentDate} {currentTime}</span>
+              </div>
             </div>
           </div>
         </div>
